@@ -30,6 +30,7 @@
 // chess · tokens · bonds · garrisons · items · bands · effects · choices · enemies · factions ·
 // waves · stages · bosses · config · validation · main.
 
+import { ALWAYS_ENABLED_BONDS } from '../shared/bondPolicy.js';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -2975,7 +2976,8 @@ function buildConfig(ctx, waves, stages, bands) {
       color: `#${String(m.modeColor || '').replace(/^#/, '')}`, iconId: m.modeIconId, backgroundId: m.backgroundId || null,
       desc: m.desc, effectDescList: m.effectDescList || [], unlockText: m.unlockText || null,
       specialPhaseTime: m.specialPhaseTime,
-      activeBondIds: m.activeBondIdList || [], inactiveBondIds: m.inactiveBondIdList || [], inactiveEnemyKeys: m.inactiveEnemyKey || [],
+      activeBondIds: [...new Set([...(m.activeBondIdList || []), ...(m.inactiveBondIdList || []).filter((b) => ALWAYS_ENABLED_BONDS.includes(b))])],
+      inactiveBondIds: (m.inactiveBondIdList || []).filter((b) => !ALWAYS_ENABLED_BONDS.includes(b)), inactiveEnemyKeys: m.inactiveEnemyKey || [],
       lastRound, bossRound, hiddenRound,
       rounds, spRounds: roundNums.filter((r) => rounds[r].isSpPrepare),
       combatTimeLimit, enemyScale,

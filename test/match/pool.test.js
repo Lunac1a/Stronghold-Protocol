@@ -156,8 +156,11 @@ test('per-match disabled bonds: 3 core + 4 add-on (NORMAL+), FUNNY static + 0 + 
   }
   // FUNNY: the static list alone removes many operators
   const f = drawDisabledBonds(new GameData(DATA, 'mode_multi_funny'), createRng(1));
-  assert.equal(f.staticOff.length, 10);
-  assert.ok(f.banned.length >= 20);
+  assert.equal(f.staticOff.length, 8);
+  assert.ok(f.banned.length > 0);
+  for (const id of f.banned) {
+    assert.ok(!DATA.chess[id].bonds.some((b) => ['egirShip', 'lateranoShip', 'indomShip'].includes(b)));
+  }
 });
 
 test('the match pool excludes banned chess; m.public lists disabled bonds and banned chess', () => {

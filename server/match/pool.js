@@ -14,9 +14,11 @@
 // ("copy-weighted"; duplicates within a roll allowed). The item slot picks a tier with the same tier shares, then a
 // uniform shop-eligible item of that tier (falling back to lower tiers).
 
+import { ALWAYS_ENABLED_BONDS } from '../../shared/bondPolicy.js';
+
 /**
  * Per-match disabled bond set D and banned chess (research 01 A2): D = uniform sample of `core` core bonds and `addon`
- * add-on bonds among weight > 0 bonds that are active in the mode. A visible chess is banned iff every one of its
+ * add-on bonds among weight > 0 bonds that are active in the mode, excluding ALWAYS_ENABLED_BONDS. A visible chess is banned iff every one of its
  * bonds is in D ∪ mode.inactiveBondIds.
  * @param {import('./gamedata.js').GameData} gd
  * @param {Function} rng seeded rng (createRng)
@@ -27,7 +29,7 @@ export function drawDisabledBonds(gd, rng) {
   const staticOff = [...gd.modeInactiveBonds].filter((b) => gd.bond(b)).sort();
   const eligible = gd.bondIds.filter((b) => {
     const bond = gd.bond(b);
-    return bond && Number(bond.weight) > 0 && !gd.modeInactiveBonds.has(b);
+    return bond && Number(bond.weight) > 0 && !gd.modeInactiveBonds.has(b) && !ALWAYS_ENABLED_BONDS.includes(b);
   });
   const core = eligible.filter((b) => gd.bond(b).isCore);
   const addon = eligible.filter((b) => !gd.bond(b).isCore);
