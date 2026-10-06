@@ -33,6 +33,7 @@
 // flashes, afterimages, debris, scorch marks, aura motes — are skipped at quality 'low' and under heavy load
 // (adaptive load level ≥ 2), and trails yield to bursts near the particle cap (SOFT_CAP).
 
+import { SpineActor } from './spine.js';
 import { fxAtlas } from './textures.js';
 import { DMG_STYLE, dmgStyleKey, HIT_TINT, PROJ, COLORS } from './style.js';
 
@@ -173,6 +174,11 @@ const num = (v, d) => { const n = typeof v === 'number' ? v : typeof v === 'stri
  */
 export const FX_KINDS = Object.freeze({
   // blasts
+  wangStone: { a: 'none' },
+  wangStoneEnd: { a: 'none' },
+  wangLink: { a:'telegraph', c:0x85ded3, pt:true, dur:0.15, r:1 },
+  musicNote: { a: 'generic', c: 0xc28cff, pt: true },
+  fever: { a: 'wave', c: 0xff64cf, dur: 2 },
   aoe: { a: 'blast', c: 0xffb35c }, explode: { a: 'blast', c: 0xff7a33 }, explosion: { a: 'blast', c: 0xff7a33 },
   // `pt`: always at the event's (x, y) (its `id` is the shooter); `heavy`: debris + scorch
   bombard: { a: 'blast', c: 0xffa04a, r: 1.5, pt: true, heavy: true }, bombardShell: { a: 'shell', c: 0xff5a3a, r: 1.5, pt: true },
@@ -264,6 +270,7 @@ const SILENT_PHASES = new Set(['bombed']);
 /** Visual spec of an fx kind (see FX_KINDS); `extra.kind` / `extra.element` may pick a better colour. */
 export function fxSpec(kind, extra = {}) {
   const k = typeof kind === 'string' ? kind : '';
+  if(k==='musicNote')return {...FX_KINDS.musicNote,c:extra.type==='phys'?0xffd06a:0xc28cff};
   if (k === 'phase' && SILENT_PHASES.has(extra && extra.kind)) return { a: 'none', c: 0xffffff };
   let spec = FX_KINDS[k];
   if (!spec) {
@@ -331,6 +338,7 @@ export class FxSystem {
     this.shadowLayer = new P.Container();
     ctx.layers.fxNormal.addChild(this.shadowLayer, this.normPc);
     ctx.layers.fxAdd.addChild(this.addPc);
+    this.wangPieces = new Map();
     this.parts = [];          // active particle records { sp, add, x, y, vx, … }
     this.freeAdd = []; this.freeNorm = [];   // pooled particle records (their sprites stay in the containers)
     this.projs = [];
@@ -1702,8 +1710,24 @@ export class FxSystem {
    * t (shell flight, game s), src / from / to / target / targets (unit ids), fx, fy / fromX, fromY / tx, ty (positions),
    * element, n, scale, kind, tiles.
    */
+  _wangPiece(x,y,ex) {
+    if(!Number.isFinite(x)||!Number.isFinite(y))return;
+    const key=`${ex.id}:${y}:${x}`;let piece=this.wangPieces.get(key);
+    if(piece){piece.until=this.time+.5;return;}
+    const entry=this.ctx.assets.spineEntry('token_10064_wang_stone1');if(!entry)return;
+    piece={x,y,owner:ex.id,entry,until:this.time+.5,actor:null};this.wangPieces.set(key,piece);
+    this.ctx.assets.spine.acquire(entry).then(data=>{
+      if(this.wangPieces.get(key)!==piece){this.ctx.assets.spine.release(entry);return;}
+      piece.actor=new SpineActor(data,entry);piece.actor.deploy();this.ctx.layers.fxNormal.addChild(piece.actor.spine);
+    }).catch(()=>{if(this.wangPieces.get(key)===piece)this.wangPieces.delete(key);this.ctx.assets.spine.release(entry);});
+  }
+
+  _dropWangPiece(key,piece){this.wangPieces.delete(key);if(piece.actor){piece.actor.destroy();this.ctx.assets.spine.release(piece.entry);}}
+
   simFx(kind, x, y, extra) {
     const ex = extra && typeof extra === 'object' ? extra : {};
+    if(kind==='wangStoneEnd'){const key=`${ex.id}:${y}:${x}`,piece=this.wangPieces.get(key);if(piece)this._dropWangPiece(key,piece);return;}
+    if(kind==='wangStone'){this._wangPiece(Number(x),Number(y),ex);return;}
     const spec = fxSpec(kind, ex);
     if (spec.a === 'none') return; // an event the screen does not show (hitCap)
     const at = spec.pt ? this._point(Number(x), Number(y)) : this._where(Number(x), Number(y), ex);
@@ -2176,6 +2200,7 @@ export class FxSystem {
 
   /** Remove everything (battle reset). */
   clear() {
+    for(const [key,piece]of this.wangPieces)this._dropWangPiece(key,piece);
     for (const p of this.parts) this._freeParticle(p);
     this.parts.length = 0;
     for (const pr of this.projs) this._releaseProj(pr);
@@ -2208,6 +2233,11 @@ export class FxSystem {
 
   update(dt) {
     this.time += dt;
+    for(const [key,piece]of this.wangPieces){
+      const owner=this._viewOf(piece.owner);if(!owner||owner.alive===false){this._dropWangPiece(key,piece);continue;}
+      if(!piece.actor)continue;const p=this._proj(piece.x,piece.y,this._groundZ(piece.x,piece.y));
+      piece.actor.spine.position.set(p.x,p.y);piece.actor.spine.scale.set(p.s/320);piece.actor.update(dt);
+    }
     this._updateParticles(dt);
     this._updateProjs(dt);
     this._updateLocks(dt);

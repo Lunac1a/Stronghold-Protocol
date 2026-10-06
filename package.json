@@ -34,7 +34,12 @@
     "postinstall": "node tools/vendor.mjs",
     "setup": "node tools/setup.mjs",
     "doctor": "node tools/doctor.mjs",
-    "launch": "node scripts/launch.mjs"
+    "launch": "node scripts/launch.mjs",
+    "assets:repair-enemies": "node tools/repair-prts-enemies.mjs",
+    "assets:custom": "node tools/fetch-custom-assets.mjs",
+    "verify:preview": "node tools/verify-custom-preview.mjs",
+    "verify:custom": "node tools/verify-custom-operators.mjs",
+    "test:custom": "node --test test/content/custom_operators.test.js"
   },
   "engines": {
     "node": ">=22"

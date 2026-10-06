@@ -207,6 +207,11 @@ export async function processModels(models, { root, dl, cachePath, download = tr
     if (sk.missingRegions?.length) problems.push(`${m.key}: ${sk.missingRegions.length} attachment(s) not in atlas (e.g. ${sk.missingRegions[0]})`);
     if (!sk.animations.length) { problems.push(`${m.key}: skeleton has no animations`); continue; }
     const anims = resolveRoles(sk.animations, { skillIndices: m.skillIndices, durations: sk.durations });
+    // Tactical anchor's official Idle/Start tracks explicitly remove C_Token.
+    // The marker is on Default; expose that pose while the anchor is awaiting use.
+    if(m.key==='token:token_10068_kalts2_mtship'&&sk.animations.includes('Default')){
+      anims.idle='Default';anims.deploy='Default';
+    }
     entries.set(m.key, {
       skel: assetUrl(m.skel.rel),
       atlas: assetUrl(m.atlas.rel),

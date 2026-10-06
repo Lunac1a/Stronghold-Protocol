@@ -70,6 +70,7 @@ export function buildBattleSpec(o = {}) {
     boss: bossLike && o.boss ? { poolHp: Number(o.boss.poolHp) || 0, poolMax: Number(o.boss.poolMax) || 1 } : null,
   };
   const out = JSON.parse(JSON.stringify(spec, specReplacer));
+  if(Array.isArray(o.customActions)&&o.customActions.length)out.customActions=jsonClone(o.customActions);
   for (const p of out.players) for (const u of (p && Array.isArray(p.units) ? p.units : [])) if (u && typeof u === 'object') sanitizeUnitLoadout(u);
   return out;
 }
@@ -116,6 +117,7 @@ export function createBattleFromSpec(spec, dataSource, opts = {}) {
     routes: s.routes ?? [],
     sharedBoss,
     flags: s.flags ?? {},
+    customActions: s.customActions ?? [],
     fieldId: s.fieldId,
     enemyOverrides: s.enemyOverrides ?? {},
     waveId: s.waveId ?? null,

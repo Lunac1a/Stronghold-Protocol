@@ -467,6 +467,7 @@ export const SUB = Object.freeze({
   physician: P({ heal: { mode: 'single' } }),
   ringhealer: P({ heal: { mode: 'multi', count: 3 } }),
   chainhealer: P({ heal: { mode: 'chain', count: 3, falloff: 0.25 } }),
+  watchman: P({ heal: { mode: 'single' }, blockFly: true, install: installSkywalker }),
   healer: P({ heal: { mode: 'single', farMul: 0.8, nearDist: 2 } }),
   wandermedic: P({ heal: { mode: 'single', elementHealRatio: 0.5 } }),
   incantationmedic: P({ dmgType: 'arts', projectile: 'bolt', heal: null, install: installIncantation }),
@@ -531,7 +532,7 @@ export const SUB = Object.freeze({
  */
 const TUNE = {
   fastshot: (tb) => ({ flyScale: num(tb.atk_scale, 1) }),
-  bombarder: (tb) => ({ shockScale: num(tb['attack@append_atk_scale'], 0.5), shockTimes: num(tb['attack@times'], 2) }),
+  bombarder: (tb) => ({ shockScale: num(tb['attack@append_atk_scale'], 0.5), shockTimes: num(tb['attack@times'], tb['attack@enable_third_attack'] ? 3 : 2) }),
   // PRTS 溅射半径一览 特殊: 格雷伊 1.0 (the branch's 1.1 otherwise)
   splashcaster: (tb, def) => ((def.charId ?? def.raw?.charId) === 'char_253_greyy' ? { splashRadius: 1.0 } : {}),
   hunter: (tb) => ({ ammoMax: num(tb.value, 8), ammoScale: num(tb.atk_scale, 1.2) }),

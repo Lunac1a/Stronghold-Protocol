@@ -485,7 +485,7 @@ export class UnitView {
         actor = new SpineActor(data, entry);
         actor.setSkillIndex(this.info.skillIndex);
         // enemies play their attack clip once per attack, then walk on (GitHub #58: the sim stands them for that clip)
-        actor.clipPerAttack = this.isEnemy;
+        actor.clipPerAttack = this.isEnemy || ((id==='char_1035_wisdel'||this.info.spine==='char_1035_wisdel')&&this.info.skillIndex===2);
       } catch (err) {
         console.warn('[render] spine build failed', id, err?.message || err);
         this._releaseEntry(entry);
@@ -640,6 +640,7 @@ export class UnitView {
   /** Apply an interpolated sample (render/interp.js); `t` = the render clock's game time (ring countdowns). */
   sync(s, t) {
     if (!s) return;
+    this.gauge=s.gauge||null;
     if (Number.isFinite(t)) this.gameT = t;
     // the element gauge shown (b.snap `elem`): element, fill 0..1, cooldown end (game s) and length
     this.el = typeof s.el === 'string' ? s.el : null;
@@ -1117,7 +1118,9 @@ export class UnitView {
       ic.position.set(x - ((icons.length - 1) * (isz + 2)) / 2 + i * (isz + 2), iy);
     }
     // element gauge row under the bars (b.snap `elem`); redeploy ring above a knocked-down operator (b.snap `down`)
-    this._updateElementBar(showBars && !!this.el, x0, bw, cy + bh / 2 + (showSp ? spH + 1.5 : 0) + 1, spH, s, t);
+    const gaugeTop=cy+bh/2+(showSp?spH+1.5:0)+1;
+    const gaugeHeight=this._updateCustomGauge(showBars&&!!this.gauge,x0,bw,gaugeTop,spH,s,t);
+    this._updateElementBar(showBars && !!this.el, x0, bw, gaugeTop+gaugeHeight, spH, s, t);
     this._updateDownRing(!prep && !!this.down && !this.alive, x, this.screen.y - DOWN_LOOK.height * s, s, t);
     // blocked marker at the feet (enemies held by a blocker)
     const blocked = !prep && this.alive && this.isEnemy && (this.flags & UF.BLOCKED);
@@ -1151,6 +1154,26 @@ export class UnitView {
    * The share of the element bar drawn (0..1): the remaining 元素值 (1 − fill), or during a 爆发冷却 the part of the
    * cooldown already run (the bar refills to full, PRTS 元素 "元素条显示缓慢恢复至上限"). 0 without a gauge.
    */
+  _updateCustomGauge(show,x0,bw,top,height,scale,t){
+    if(!this.customGauge&&show){
+      const P=this.P,bg=bar(P,this.hud,COLORS.hpBack,0.9),fill=bar(P,this.hud,0xf16eba);
+      const label=new P.Text('',{fontFamily:'Bender, "Noto Sans SC", sans-serif',fontSize:20,fontWeight:'700',fill:'#ffffff',stroke:'#101925',strokeThickness:3});
+      this.hud.addChild(label);this.customGauge={bg,fill,label};
+    }
+    const ui=this.customGauge;if(!ui)return 0;
+    ui.bg.visible=ui.fill.visible=ui.label.visible=!!show;if(!show)return 0;
+    const g=this.gauge,active=g.kind==='fever'&&g.until>t,left=Math.max(0,g.until-t);
+    const ratio=active?clamp(left/Math.max(0.01,g.duration),0,1):clamp(g.value/g.max,0,1);
+    const text=g.kind==='stock'?`棋子 ${Math.floor(g.value)}/${g.max}`:active?`FEVER ${left.toFixed(1)}s`:`FEVER ${Math.floor(g.value)}/${g.max}`;
+    if(ui.label.text!==text)ui.label.text=text;
+    ui.label.scale.set(clamp(scale*0.16,8,12)/20);ui.label.position.set(x0,top+1);
+    const y=top+ui.label.height+3;
+    ui.bg.position.set(x0-1,y);ui.bg.width=bw+2;ui.bg.height=height+2;
+    ui.fill.position.set(x0,y);ui.fill.width=Math.max(0.01,bw*ratio);ui.fill.height=height;
+    ui.fill.tint=g.kind==='stock'?0xf2cf78:active?0xffa1d5:0xbb80ea;
+    return ui.label.height+height+7;
+  }
+
   elementLeft() {
     if (!this.el) return 0;
     if (this.elementCooling()) return clamp(1 - (this.elUntil - this.gameT) / this.elDur, 0, 1);

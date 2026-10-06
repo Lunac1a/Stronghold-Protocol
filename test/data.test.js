@@ -74,12 +74,12 @@ test('numbers: every stats/bb/enemyScale object holds only finite numbers (no nu
   assert.deepEqual(bad.slice(0, 10), [], `${bad.length} bad numeric fields`);
 });
 
-test('chess: 266 records, 112 visible non-DIY (16/17/19/22/19/19 per tier)', () => {
-  assert.equal(Object.keys(chess).length, 266);
-  assert.equal(visible.length, 112);
+test('chess: 276 records, 117 visible non-DIY (16/17/19/22/22/21 per tier)', () => {
+  assert.equal(Object.keys(chess).length, 276);
+  assert.equal(visible.length, 117);
   const perTier = {};
   for (const c of visible) perTier[c.tier] = (perTier[c.tier] || 0) + 1;
-  assert.deepEqual(perTier, { 1: 16, 2: 17, 3: 19, 4: 22, 5: 19, 6: 19 });
+  assert.deepEqual(perTier, { 1: 16, 2: 17, 3: 19, 4: 22, 5: 22, 6: 21 });
   assert.equal(normalChess.filter((c) => c.isDiy).length, 4);
   assert.equal(normalChess.filter((c) => c.isHidden).length, 17);
 });
@@ -426,7 +426,7 @@ test('chess/tokens: talent tokens resolve and every token variant says where it 
     assert.equal(t.placeable, t.displayType !== 'HIDDEN' && made, `${t.tokenId} (${t.name}): placeable`);
   }
   assert.deepEqual(Object.values(tokens).filter((t) => t.placeable).map((t) => t.name).sort(),
-    ['医疗探机', '诅咒娃娃', '斯卡蒂的海嗣', '流形', '狼群', '爬行号·防护单元'].sort());
+    ['医疗探机', '战术锚点', '棋子', '诅咒娃娃', '斯卡蒂的海嗣', '流形', '狼群', '爬行号·防护单元'].sort());
   assert.equal(tokens.enemy_9012_acloon.stats.deployLimit, tokens.enemy_9012_acloon.deployLimit);
 });
 
@@ -776,3 +776,24 @@ test('build CLI rejects unknown options and missing values without writing anyth
     assert.match(r.stderr, /usage:/);
   }
 });
+
+test('five custom recruits use full trust and potential at the existing normal/elite training levels', { skip: !HAS_CACHE && 'no .cache/gamedata' },()=>{
+ const CT=raw('excel/character_table.json'),BE=raw('excel/battle_equip_table.json');
+ const field={MAX_HP:'maxHp',ATK:'atk',DEF:'def',MAGIC_RESISTANCE:'magicResistance',COST:'cost',ATTACK_SPEED:'attackSpeed',RESPAWN_TIME:'respawnTime'};
+ const output={maxHp:'maxHp',atk:'atk',def:'def',magicResistance:'res',cost:'cost',attackSpeed:'aspd',respawnTime:'respawnTime'};
+ const moduleField={max_hp:'maxHp',atk:'atk',def:'def',magic_resistance:'res',cost:'cost',attack_speed:'aspd',respawn_time:'respawnTime'};
+ const recruits=Object.values(chess).filter(c=>c.chessId.startsWith('chess_custom_'));assert.equal(recruits.length,10);
+ for(const c of recruits){
+  assert.equal(c.status.potential,6);assert.equal(c.status.trust,200);assert.equal(c.status.phase,2);assert.equal(c.status.level,c.isGolden?60:1);assert.equal(c.status.skillLevel,c.isGolden?7:4);
+  const char=CT[c.charId],frames=char.phases[2].attributesKeyFrames,first=frames[0],last=frames.at(-1),ratio=(c.status.level-first.level)/(last.level-first.level),trust=char.favorKeyFrames.at(-1).data;
+  const expected={};for(const key of Object.keys(output))expected[key]=first.data[key]+(last.data[key]-first.data[key])*ratio+(trust[key]||0);
+  for(const rank of char.potentialRanks)for(const a of rank.buff?.attributes?.attributeModifiers||[])expected[field[a.attributeType]]+=a.value;
+  for(const key of ['maxHp','atk','def','cost','respawnTime'])expected[key]=Math.round(expected[key]);
+  const want=Object.fromEntries(Object.entries(output).map(([k,v])=>[v,expected[k]]));
+  const module=c.modules?.find(m=>m.uniEquipId===c.module?.id);
+  const mp=module&&BE[module.uniEquipId].phases.find(p=>p.equipLevel===c.status.equipLevel);
+  for(const a of mp?.attributeBlackboard||[])if(moduleField[a.key])want[moduleField[a.key]]+=a.value;
+  for(const [key,value]of Object.entries(want))assert.ok(Math.abs(c.stats[key]-value)<1e-6,`${c.chessId} ${key}: ${c.stats[key]} vs ${value}`);
+ }
+});
+

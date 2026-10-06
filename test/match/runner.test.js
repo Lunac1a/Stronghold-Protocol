@@ -80,6 +80,38 @@ function realStart(seed = 7301) {
   return msg;
 }
 
+test('A confirmed manual input rebuilds an existing browser replica; reconnect retains input sequence and stock',async()=>{
+ const spec=specMod.buildBattleSpec({battleId:'manual',fieldId:'manual',seed:417,stageId:'act2autochess_m04',timeLimit:5,
+  players:[{playerId:'p_0',dir:'RIGHT',units:[{uid:100,chessId:'chess_custom_6_wang_a',row:10,col:5,skillIndex:0}]}],
+  routes:[{start:[10,7],end:[10,7],motion:'WALK',checkpoints:[{type:'WAIT',time:100}]}],spawns:[{enemyKey:'enemy_1007_slime',count:1,time:3,route:0}]});
+ const start={battleId:'manual',fieldId:'manual',kind:'normal',spec,authoritative:true,elapsed:0,speed:2};
+ const r=rig();r.net.emit('b.start',start);await r.settle();r.advance(500);
+ const old=r.runner._entries.get('manual'),action={kind:'wang.place',uid:100,row:12,col:4};
+ await r.runner.customAction('p_0',action);const request=r.net.sent.find(m=>m.t==='b.action');assert.ok(request);assert.equal(request.seq,0);
+ const updated={...start,elapsed:1,spec:{...spec,customActions:[{tick:3,playerId:'p_0',action,requestSeq:0}]}};
+ r.net.emit('b.start',updated);await r.settle();const current=r.runner._entries.get('manual');
+ assert.notEqual(current,old);assert.equal(current.battle.customActionResults[0].ok,true);
+ assert.equal(current.battle.allyUnits.find(u=>u.uid===100).mem.wang.stock,6);assert.equal(current.inputSeq,1);
+ r.net.emit('b.start',updated);await r.settle();assert.equal(r.runner._entries.get('manual'),current,'duplicate sync does not apply the action twice');
+ r.runner.dispose();
+ const resumed=rig();resumed.net.emit('b.start',updated);await resumed.settle();const entry=resumed.runner._entries.get('manual');
+ assert.equal(entry.inputSeq,1);assert.equal(entry.battle.allyUnits.find(u=>u.uid===100).mem.wang.stock,6);resumed.runner.dispose();
+});
+test('A non-authoritative unite participant submits inputs and replays both owners after reconnect; observers cannot act',async()=>{
+ const spec=specMod.buildBattleSpec({battleId:'unite-manual',fieldId:'unite-manual',kind:'unite',seed:417,stageId:'act2autochess_m04',timeLimit:10,
+ players:[{playerId:'p_0',dir:'RIGHT',units:[{uid:100,chessId:'chess_custom_6_wang_a',row:10,col:5,skillIndex:0}]},
+ {playerId:'p_1',dir:'RIGHT',units:[{uid:200,chessId:'chess_custom_6_wang_a',row:12,col:6,skillIndex:0}]}],spawns:[{enemyKey:'enemy_1007_slime',count:1,time:9,route:0}]});
+ const start={battleId:spec.battleId,fieldId:spec.fieldId,kind:'unite',spec,authoritative:false,watch:false,elapsed:0,speed:2},r=rig();
+ r.net.emit('b.start',start);await r.settle();r.advance(100);
+ const action={kind:'wang.place',uid:200,row:12,col:5};await r.runner.customAction('p_1',action);
+ assert.ok(r.net.sent.some(m=>m.t==='b.action'));await assert.rejects(r.runner.customAction('other',action));
+ const log=[{tick:3,playerId:'p_1',action,requestSeq:0},{tick:4,playerId:'p_0',action:{kind:'wang.place',uid:100,row:12,col:4},requestSeq:0}],updated={...start,elapsed:0.3,spec:{...spec,customActions:log}};
+ r.net.emit('b.start',updated);await r.settle();const b=r.runner._entries.get(spec.battleId).battle;
+ assert.equal(b.customActionResults.length,2);assert.ok(b.customActionResults.every(a=>a.ok));const snap=b.snapshot();r.runner.dispose();
+ const resumed=rig();resumed.net.emit('b.start',updated);await resumed.settle();assert.deepEqual(resumed.runner._entries.get(spec.battleId).battle.snapshot(),snap);resumed.runner.dispose();
+ const spectator=rig();spectator.net.emit('b.start',{...updated,watch:true});await spectator.settle();await assert.rejects(spectator.runner.customAction('p_1',action));spectator.runner.dispose();
+});
+
 test('authoritative battle: 2× pacing, ≤ max(8, 4·speed) ticks per frame, b.snap / b.ev feed, field meta in the store, progress ~1 Hz, the server-identical result', async () => {
   const start = realStart();
   assert.ok(start && start.authoritative);
@@ -467,3 +499,4 @@ test('live unit stats (user playtest #4 item 7): unitStats(id) reads the battle 
   assert.equal(r.runner.unitIdOf(ally.uid, ally.ownerId), null);
   r.runner.dispose();
 });
+

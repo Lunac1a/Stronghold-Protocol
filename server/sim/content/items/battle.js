@@ -824,6 +824,10 @@ const SHIELD_KEY = 'item:shield_drone';
  */
 export function weaknessRetype(dmg, source, target) {
   if (!dmg || !target || !target.s || (dmg.type !== 'phys' && dmg.type !== 'arts')) return;
+  // PRTS fixed weakness bypasses the DEF/RES comparison. These flags express
+  // the target's affinity; two affinities do not establish a fixed weakness.
+  const flags=target.s.flags||{},phys=!!flags.fixedWeaknessPhys,arts=!!flags.fixedWeaknessArts;
+  if(phys!==arts){dmg.type=phys?'phys':'arts';return;}
   const ph = mitigated(dmg.amount, 'phys', target, source, dmg);
   const ar = mitigated(dmg.amount, 'arts', target, source, dmg);
   const best = ar > ph + 1e-9 ? 'arts' : ph > ar + 1e-9 ? 'phys' : dmg.type;

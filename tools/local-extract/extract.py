@@ -538,10 +538,10 @@ def normalize_atlas(text, sizes):
     return '\n'.join(out)
 
 
-def write_enemy_spine(objects, sda, eid, out_root, manifest, log):
+def write_enemy_spine(objects, sda, eid, out_root, manifest, log, subdir=None):
     """Write one enemy model (skeleton, atlas, merged pages) of a SkeletonDataAsset typetree; returns the file count."""
     get = lambda pptr: objects.get(pptr['m_PathID']) if pptr and not pptr.get('m_FileID') else None  # noqa: E731
-    sub = f'{ENEMY_SPINE_SUB}/{eid}'
+    sub = subdir or f'{ENEMY_SPINE_SUB}/{eid}'
     out_dir = Path(out_root) / sub
     out_dir.mkdir(parents=True, exist_ok=True)
     files = {}
@@ -618,6 +618,38 @@ def export_enemy_spines(ab_root, out_root, manifest, log, ids=None):
     return n
 
 
+CUSTOM_TOKEN_IDS = ['token_10064_wang_stone1', 'token_10068_kalts2_mtship', 'token_10035_wisdel_wward']
+
+def export_custom_token_spines(ab_root, out_root, manifest, log, only=None):
+    """Reuse the SkeletonDataAsset exporter so separate RGB/alpha textures are merged."""
+    import aklz4  # noqa: F401
+    import UnityPy
+    total = 0
+    for token in CUSTOM_TOKEN_IDS:
+        sub = f'spine/{token}'
+        if not wants_sub(only, sub):
+            continue
+        bundle = Path(ab_root) / 'skinpack' / (token + '.ab')
+        if not bundle.exists():
+            log(f'skip (not found) {bundle}')
+            continue
+        try:
+            env = UnityPy.load(str(bundle))
+            objects = {obj.path_id: obj for obj in env.objects}
+            for obj in env.objects:
+                if obj.type.name != 'MonoBehaviour':
+                    continue
+                try:
+                    tree = obj.read_typetree()
+                except Exception:
+                    continue
+                if tree.get('skeletonJSON') and tree.get('atlasAssets'):
+                    total += write_enemy_spine(objects, tree, token, out_root, manifest, log, subdir=sub)
+        except Exception as exc:
+            log(f'FAIL {token}: {exc}')
+    return total
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--game', help='AssetBundle root (…/StreamingAssets/AB/Windows or …/Documents/Bundles)')
@@ -649,7 +681,8 @@ def main():
         return 2
     jobs = select_jobs(args.only)
     enemy_spines = wants_sub(args.only, ENEMY_SPINE_SUB)
-    if not jobs and not enemy_spines:
+    custom_spines = any(wants_sub(args.only, 'spine/' + token) for token in CUSTOM_TOKEN_IDS)
+    if not jobs and not enemy_spines and not custom_spines:
         print(f'--only {args.only}: no job matches', file=sys.stderr)
         return 2
     out_root = Path(args.out)
@@ -660,6 +693,8 @@ def main():
         total += export_bundle(ab_root, job, out_root, manifest, print)
     if enemy_spines:
         total += export_enemy_spines(ab_root, out_root, manifest, print)
+    if custom_spines:
+        total += export_custom_token_spines(ab_root, out_root, manifest, print, args.only)
     old = {}
     if args.only and Path(args.manifest).exists():
         try:

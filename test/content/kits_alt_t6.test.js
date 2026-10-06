@@ -52,7 +52,7 @@ const skillBuff = (u) => u.findBuff(`skill:${u.id}`);
 
 test('kit coverage: every selectable skill of every visible tier-6 chess is hand-authored (normal + elite, every module)', () => {
   const rep = kitCoverage({ tier: 6 });
-  assert.equal(rep.summary.chess, 19);
+  assert.equal(rep.summary.chess, 21);
   assert.equal(rep.summary.covered, rep.summary.skills, JSON.stringify(rep.chess.filter((r) => r.skills.some((s) => !s.covered)).map((r) => r.name)));
   for (const r of rep.chess) {
     for (const s of r.skills.filter((x) => !x.isDefault)) {
@@ -75,8 +75,11 @@ test('every tier-6 skill × module choice (normal + elite) survives a real wave 
       for (const s of r.skills) for (const moduleId of mods) {
         const h = makeBattle({
           seed: 3, timeLimit: 60,
+          // Correctly randomized notes can kill low-HP slimes before S3's
+          // range-trigger check. Keep a durable in-range target to exercise it.
+          ...(id.includes('oblvns')?{defs:{enemies:{castTarget:enemyRec({key:'castTarget',hp:1e8,atk:0,speed:0})}}}:{}),
           units: [{ chessId: id, row: 10, col: 4, skillIndex: s.index, moduleId, carryState: READY }, { chessId: 'chess_char_1_01_a', row: 9, col: 4 }, { chessId: 'chess_char_2_06_a', row: 11, col: 5 }],
-          enemies: [{ key: 'enemy_1007_slime', count: 8, interval: 1.5 }, { key: 'enemy_1007_slime', route: 1, count: 8, interval: 1.5, time: 3 }],
+          enemies: [{ key: 'enemy_1007_slime', count: 8, interval: 1.5 }, { key: 'enemy_1007_slime', route: 1, count: 8, interval: 1.5, time: 3 },...(id.includes('oblvns')?[{key:'castTarget',pos:[10,6]}]:[])],
         });
         h.runToEnd(90);
         done(h);

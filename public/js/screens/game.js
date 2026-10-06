@@ -212,6 +212,8 @@ function MatchScreen() {
   const [facing, setFacing] = useState(null);            // direction step: { uid, piece, row, col, grid, name }
   const [sel, setSel] = useState(null);                  // tapped own piece: { uid }
   const [selBusy, setSelBusy] = useState(false);
+  const [manualWang,setManualWang]=useState(null);
+  const [manualBusy,setManualBusy]=useState(false);
   const [holdSeq, setHoldSeq] = useState(0);             // bumped when a held piece is released (re-apply the prep state)
   const [hud, setHud] = useState(null);
   const [banner, setBanner] = useState(null);
@@ -279,7 +281,8 @@ function MatchScreen() {
     priv, stage: gd.stage(pub?.stageId), editable, field: deployField,
     getChess: gd.chess, getToken: gd.token, getItem: gd.item, getEffect: gd.effect,
   }), [priv, pub?.stageId, editable, gd.ready, deployField]);
-  live.current = { pub, priv, field, editable, placeCtx, watching, watchWho, home, myId, detail, drawer, bondOpen, emoteOpen, settingsOpen, exitOpen, drag, facing, sel, selBusy, pen, collapsedNow: collapsed, localDone: false, canPause: false, paused };
+  live.current = { pub, priv, field, editable, placeCtx, watching, watchWho, home, myId, detail, drawer, bondOpen, emoteOpen, settingsOpen, exitOpen, drag, facing, sel, selBusy, manualWang,manualBusy,pen, collapsedNow: collapsed, localDone: false, canPause: false, paused };
+  useEffect(()=>{if(!combat||watchingOther||battleState?.done)setManualWang(null);},[combat,watchingOther,battleState?.battleId,battleState?.done]);
 
   // ---- camera: every request goes through setCam, which remembers it for the pen's way back -----------------------
   // the own prep board: the normal board, or — in the prep of a boss round — the player's half of the boss field
@@ -878,13 +881,31 @@ function MatchScreen() {
         const reason = dropFailureReason(L.placeCtx, e.uid, tile);
         if (reason) refuse(reason);
       }),
+      view.on('battleTileClick',async e=>{
+        const L=live.current,m=L.manualWang;
+        if(!m?.armed||L.manualBusy||e?.button!==0||!L.field?.local)return;
+        if(m.kind==='kalts.move'&&!m.targetUid)return;
+        setManualBusy(true);
+        try{await battleRunner.customAction(L.myId,{kind:m.kind||'wang.place',uid:m.uid,row:e.row,col:e.col,...(m.kind==='kalts.move'?{targetUid:m.targetUid}:{})});if(m.kind==='kalts.move')setManualWang(x=>x?{...x,targetUid:null,targetName:null}:null);else if(m.kind==='kalts.anchor')setManualWang(x=>x?{...x,kind:'kalts.move',armed:false}:null);}
+        catch(err){
+          const reasons={tile:'该地块不能部署',enemy:'当前技能不能在敌人地块放置棋子',stock:'棋子库存不足',dp:'部署费用不足',limit:'已达到棋子部署上限',cooldown:'棋子尚在再部署冷却',unit:'干员当前不在场',deploy:'部署未成功',charges:'可移动次数已用完',target:'该干员不符合移动条件',action:'当前技能阶段不能执行此操作'};
+          toast(reasons[err?.detail]||err?.message||'无法放置棋子','warn');
+        }finally{setManualBusy(false);}
+      }),
       view.on('pieceClick', (e) => {
         if (!e) return;
         audio.sfx('click', { volume: 0.4 });
         // an enemy of the preview pen (research 09 §2.2 "Intel": tap it for its detail card)
         const penKey = previewEnemyKey(e);
         if (penKey) { setDetail({ kind: 'enemy', id: penKey }); return; }
-        if (e.unitId != null || e.unit) { setDetail({ kind: 'unit', unit: e.unit || null, unitId: e.unitId, uid: e.uid }); return; }
+        if (e.unitId != null || e.unit) {
+          const L=live.current,state=battleRunner?.state();
+          if(e.button!==2&&L.manualWang?.armed&&L.manualWang.kind==='kalts.move'&&e.unit?.ownerId===L.myId&&e.uid!==L.manualWang.uid){setManualWang(m=>m?{...m,targetUid:e.uid,targetName:e.unit.name||'友方干员'}:null);setDetail(null);return;}
+          const canAct=!state?.watch&&state?.members?.includes(L.myId)&&(state.authoritative&&state.kind==='normal'||state.kind==='unite');
+          if(e.button!==2&&canAct&&e.unit?.ownerId===L.myId&&/^chess_custom_6_wang_[ab]$/.test(e.unit?.defId||''))setManualWang({uid:e.uid,name:e.unit.name||'望',armed:false});
+          if(e.button!==2&&canAct&&e.unit?.ownerId===L.myId&&/^chess_custom_5_kalts2_[ab]$/.test(e.unit?.defId||''))setManualWang({uid:e.uid,name:e.unit.name||'凯尔希',kind:'kalts.move',armed:false});
+          setDetail({ kind: 'unit', unit: e.unit || null, unitId: e.unitId, uid: e.uid });return;
+        }
         if (!Number.isInteger(e.uid)) return;
         setDetail({ kind: 'piece', uid: e.uid });
         // a tap selects an own piece (underframe + range); right-click / long-press only opens its detail card. A tap on
@@ -1277,6 +1298,10 @@ function MatchScreen() {
   return html`<div class=${cx('screen', 'gm', `gm--${mode}`, drag && 'is-dragging', collapsed && 'is-collapsed', sp && 'has-sp', pen && 'is-pen', readyWhy && 'has-readywhy')}
       data-camera=${pen ? 'pen' : camKind}>
     <div class="gm__field" ref=${hostRef} onContextMenu=${(e) => e.preventDefault()}></div>
+    ${manualWang&&combat&&!watchingOther?html`<div style="position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:20;pointer-events:auto" role="status">
+      ${manualWang.kind?.startsWith('kalts.')?html`<${Button} size="sm" variant="primary" disabled=${manualBusy} onClick=${()=>{setManualWang(m=>m?{...m,kind:'kalts.anchor',armed:m.kind==='kalts.anchor'?!m.armed:true,targetUid:null,targetName:null}:null);setDetail(null);}}>${manualWang.kind==='kalts.anchor'&&manualWang.armed?'点击范围外远程位 · 取消':'部署战术锚点'}<//>`:null}
+      <${Button} size="sm" variant="primary" disabled=${manualBusy} onClick=${()=>{setManualWang(m=>m?{...m,kind:m.kind?.startsWith('kalts.')?'kalts.move':m.kind,armed:m.kind==='kalts.anchor'?true:!m.armed,targetUid:null,targetName:null}:null);setDetail(null);}}>${manualBusy?'正在部署':manualWang.kind?.startsWith('kalts.')?(manualWang.kind==='kalts.move'&&manualWang.armed?(manualWang.targetUid?`已选${manualWang.targetName}，点击目标位置 · 取消`:'点击要移动的友军 · 取消'):`${manualWang.name} · 移动友军`):manualWang.armed?'点击空地放棋子 · 取消':`${manualWang.name} · 放置棋子`}<//>
+    </div>`:null}
     ${viewKind === 'loading' ? html`<div class="gm__loading"><${Spinner} label="LOADING FIELD" /></div>` : null}
     <div class="gm__vignette" aria-hidden="true"></div>
     ${tempNotice ? html`<${TempRowNotice} view=${view} count=${temp.count} items=${temp.items} label=${!drag && !facing}
@@ -1384,4 +1409,3 @@ function MatchScreen() {
     <${ExitModal} open=${exitOpen} onClose=${() => setExitOpen(false)} solo=${solo} />
   </div>`;
 }
-

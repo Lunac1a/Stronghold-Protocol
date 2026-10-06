@@ -23,7 +23,7 @@ export function resolveRecordLoadout(rec, loadout = null) {
   const wantSkill = lo.skillIndex ?? lo.skill;
   const skillIndex = skills && Number.isInteger(wantSkill) && skills.some((s) => s && s.index === wantSkill) ? wantSkill : defSkill;
   const mods = Array.isArray(rec.modules) ? rec.modules : null;
-  const defMod = mods ? (mods.find((m) => m && m.isDefault)?.uniEquipId ?? 'none') : null;
+  const defMod = mods ? (mods.find((m) => m && m.isDefault)?.uniEquipId ?? 'none') : rec.isGolden ? 'none' : null;
   const wantMod = lo.moduleId ?? lo.module;
   const moduleId = mods && (wantMod === 'none' || (typeof wantMod === 'string' && mods.some((m) => m && m.uniEquipId === wantMod))) ? wantMod : defMod;
   const skillIsDefault = skillIndex === defSkill;

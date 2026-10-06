@@ -20,7 +20,7 @@ function resistPalsyDecay({ battle, unit }) {
 export const ADD_KEYS = Object.freeze([
   'atkFlat', 'atkPct', 'atkFinal', 'defFlat', 'defPct', 'hpFlat', 'hpPct', 'resFlat', 'aspd', 'batPct', 'blockCnt',
   'rangeExtend', 'defIgnoreFlat', 'defIgnorePct', 'resIgnoreFlat', 'resIgnorePct', 'dodgePhys', 'dodgeArts',
-  'spRecoveryFlat', 'maxTargets', 'taunt', 'hpRegen', 'hpRegenRatio', 'spCostFlat', 'moveFlat', 'massFlat',
+  'spRecoveryFlat', 'maxTargets', 'taunt', 'hpRegen', 'hpRegenRatio', 'spCostFlat', 'moveFlat', 'massFlat', 'blockRadiusScale',
 ]);
 /** Multiplicative mod keys (product; ^ stacks). */
 export const MUL_KEYS = Object.freeze([
@@ -187,7 +187,10 @@ export function aggregateMods(buffs) {
         const v = m[k];
         if (typeof v !== 'number' || !Number.isFinite(v)) continue;
         if (k === 'shield') continue;
-        if (k.endsWith('Mul')) mul[k] = (mul[k] ?? 1) * (st === 1 ? v : Math.pow(v, st));
+        // Explicit movement floors are constraints, not additive bonuses. Multiple
+        // independently timed slows must not multiply the minimum allowed speed.
+        if (k === 'moveSpeedFloor') add[k] = Math.max(add[k] ?? 0, v);
+        else if (k.endsWith('Mul')) mul[k] = (mul[k] ?? 1) * (st === 1 ? v : Math.pow(v, st));
         else if ((k === 'dodgePhys' || k === 'dodgeArts') && v > 0) {
           const p = Math.min(1, v);
           const d = dodge[k];

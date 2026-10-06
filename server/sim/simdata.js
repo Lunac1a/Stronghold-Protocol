@@ -324,6 +324,9 @@ export function normalizeToken(id, t0, ownerChessId = null, variantOverride = nu
       .map((x) => ({ name: x.name ?? '', description: x.desc ?? x.description ?? '', bb: x.bb ? { ...x.bb } : flattenBlackboard(x.blackboard), bbStr: x.bbStr ? { ...x.bbStr } : {}, rangeGrid: toArrayOfPairs(x.rangeGrid), tokenKey: x.tokenKey ?? null })),
     tokens: [],
     count: num(t.count, 1),
+    // Owner skill/module variants may change this independently of the shared
+    // token record. Keep it outside combat stats, which discard deploy limits.
+    deployLimit: Number.isFinite(t.stats?.deployLimit ?? t.deployLimit) ? Math.max(0, Math.floor(t.stats?.deployLimit ?? t.deployLimit)) : null,
     // how the owner (with its loadout) produces this token: ⊆ ['talent','skill','display'] (data variant / bySkill);
     // [] or ['display'] = the owner does not produce it; null = unknown (no owner variant)
     sources: variant && Array.isArray(t.sources) ? [...t.sources] : null,

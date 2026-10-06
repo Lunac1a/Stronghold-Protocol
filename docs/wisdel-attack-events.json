@@ -1,0 +1,52 @@
+{
+  "character": "char_1035_wisdel",
+  "models": [
+    {
+      "direction": "front",
+      "path": "public/assets/spine/op/char_1035_wisdel/front/char_1035_wisdel.skel",
+      "sha256": "3d80d908389551703f7422f63c950cea8eaf199372d201ea238bcf879901aec0",
+      "version": "3.8.99",
+      "events": {
+        "OnAttack": [
+          0.533
+        ],
+        "OnAttackFinished": [
+          1.5
+        ],
+        "skill_storage_w": [
+          4.8
+        ]
+      },
+      "downEvents": {
+        "OnAttack": [
+          0.533
+        ],
+        "OnAttackFinished": [
+          1.5
+        ],
+        "skill_storage_w": [
+          4.8
+        ]
+      }
+    },
+    {
+      "direction": "back",
+      "path": "public/assets/spine/op/char_1035_wisdel/back/char_1035_wisdel.skel",
+      "sha256": "82ae6d4e016c52c2ae39009ca3f4667774bba6677084c76f53303540fc0df825",
+      "version": "3.8.99",
+      "events": {
+        "OnAttack": [
+          0.533
+        ],
+        "OnAttackFinished": [
+          1.5
+        ],
+        "skill_storage_w": [
+          4.733
+        ]
+      },
+      "downEvents": null
+    }
+  ],
+  "engineMapping": "Immediate-launch engine: blast lock retains the 29/30 seconds between frame-16 launch and frame-45 attack finish, scaled by ASPD. Pre-launch windup is not simulated."
+}

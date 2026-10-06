@@ -152,6 +152,7 @@ import {
 } from './fields.js';
 import { buildBattleSpec, createBattleFromSpec, resultDigest, compactResult as compactForVerify, battleProgress, uniteLeft } from '../sim/spec.js';
 import { CreditPool } from './finalAssault.js';
+import {CUSTOM_ACTION_LIMIT,normalizeCustomInput} from '../sim/customActions.js';
 import { buildResult } from './results.js';
 import { botPrepBeginSteps, botPrepEndSteps, botPickBand, botPickCard } from './bot.js';
 
@@ -1099,6 +1100,7 @@ export class Match {
       case 'g.leave': this.onLeave(ps.playerId); return OK;
       case 'b.progress': return this._onProgress(ps, msg);
       case 'b.result': return this._onResult(ps, msg);
+      case 'b.action': return this._onAction(ps,msg);
       default: return fail(ERR.BAD_MSG);
     }
   }
@@ -2463,6 +2465,40 @@ export class Match {
 
   _fieldByBattle(battleId) {
     return typeof battleId === 'string' ? this.fields.find((f) => f.cc && f.battleId === battleId) || null : null;
+  }
+
+  /** Validate human inputs in a cached shared-engine replay before publishing them. */
+  _onAction(ps,msg){
+    const f=this._fieldByBattle(msg.battleId);
+    if(!this.clientCombat||!f||f.done||f.heldResult||f.mode!=='client'||!['normal','unite'].includes(f.kind)||!f.players.includes(ps.playerId)||f.kind==='normal'&&f.authority!==ps.playerId)return fail(ERR.WRONG_PHASE);
+    const unit=f.spec.players.find(p=>p.playerId===ps.playerId)?.units?.find(u=>u.uid===msg.action?.uid);
+    if(!unit||!(msg.action?.kind==='wang.place'&&/^chess_custom_6_wang_[ab]$/.test(unit.chessId)||['kalts.move','kalts.anchor'].includes(msg.action?.kind)&&/^chess_custom_5_kalts2_[ab]$/.test(unit.chessId)))return fail(ERR.BAD_MSG);
+    if(!Number.isInteger(msg.seq)||msg.seq<0||msg.seq>=CUSTOM_ACTION_LIMIT)return fail(ERR.BAD_MSG);
+    f.actionRequests ||= new Map();
+    const key=`${ps.playerId}:${msg.seq}`,signature=JSON.stringify([msg.tick,msg.action]);
+    if(f.actionRequests.has(key)){
+      if(f.actionRequests.get(key)!==signature)return fail(ERR.BAD_MSG);
+      this._sendStart(ps.playerId,f);return OK;
+    }
+    const elapsedTick=Math.ceil(this._fieldElapsed(f)*30);
+    if(!Number.isInteger(msg.tick)||msg.tick<0||msg.tick>elapsedTick+30)return fail(ERR.BAD_MSG);
+    const log=f.spec.customActions||[];
+    if(log.length>=CUSTOM_ACTION_LIMIT)return fail(ERR.RATE);
+    const battle=f.actionBattle||(f.actionBattle=this._specBattle(f.spec));
+    const tick=Math.max(msg.tick,elapsedTick,battle.tickCount);
+    const input=normalizeCustomInput({tick,playerId:ps.playerId,action:msg.action});
+    const before=battle.customActionResults.length;
+    if(!input||!battle.queueCustomAction(input))return fail(ERR.BAD_MSG);
+    while(!battle.finished&&battle.tickCount<=tick)battle.step();
+    const result=battle.customActionResults.at(-1);
+    if(battle.customActionResults.length===before||!result?.ok){f.actionBattle=null;return fail(ERR.BAD_MSG,result?.reason||'battle ended');}
+    input.requestSeq=msg.seq;
+    f.spec.customActions=[...log,input];f.actionRequests.set(key,signature);
+    f.spectatorSpec=null; // cached spectator specs must include the new input too
+    // b.start includes the whole accepted log: replicas, reconnects and server
+    // takeovers therefore have exactly the same inputs as the acting client.
+    for(const pid of this._humansShowing(f))this._sendStart(pid,f,{watch:!f.players.includes(pid)});
+    return OK;
   }
 
   /** b.progress from a field's authority (anything else — a stale battle, a demoted client — is ignored). */

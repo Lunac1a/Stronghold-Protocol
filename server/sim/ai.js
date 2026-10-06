@@ -81,13 +81,13 @@ export function updateAlly(b, u, dt) {
   if (u.atkCd > 0) return;
   if (prof.canAttack && !prof.canAttack(b, u)) return;
   let targets = acquireTargets(b, u, prof);
-  if (!targets.length) { u.trait.hadTarget = false; return; }
+  if (!targets.length && !prof.permanentAttack) { u.trait.hadTarget = false; return; }
   u.trait.hadTarget = true;
   if (sk && sk.onAboutToAttack()) {
     prof = effectiveProfile(u);
     if (prof.noAttack || !u.alive) return;
     targets = acquireTargets(b, u, prof);
-    if (!targets.length) return;
+    if (!targets.length && !prof.permanentAttack) return;
   }
   performAttack(b, u, prof, targets);
   u.atkCd = Math.max(u.atkCd, u.s.interval);
@@ -151,8 +151,10 @@ export function performAttack(b, u, prof, targets, opts = null) {
     const ctx = { attacker: u, targets, isSkill, profile: prof };
     b.emit('beforeAttack', ctx);
     targets = (ctx.targets || []).filter((t) => t && t.alive);
-    if (!targets.length || !u.alive) return;
+    if ((!targets.length && !prof.permanentAttack) || !u.alive) return;
   }
+  // Opt-in launch snapshot keeps ammo attacks intact after their last shot ends the skill.
+  if (prof.snapshotAtk) prof = { ...prof, atkSnapshot: u.s.atk, atkScaleSnapshot: u.s.atkScaleMul };
   u.lastAttackAt = b.time;
   u.stats.attacks++;
   const attackId = ++b._attackSeq; // every damage instance of this attack (all targets, splash, chain) carries it
@@ -165,6 +167,13 @@ export function performAttack(b, u, prof, targets, opts = null) {
   }
   const ranged = !prof._fortressMelee && prof.attack === 'ranged' && prof.projectile && prof.projectile !== 'none' && prof.projectile !== 'beam';
   const vis = prof._fortressMelee ? 'none' : (prof.projectile || 'none');
+  if (prof.customAttack) {
+    b._ev(['atk', u.id, targets[0]?.id ?? u.id, 'none']);
+    b._safe(() => prof.customAttack(b, u, targets, { isSkill, attackId }), 'profile.customAttack', u);
+    if (b._hooks.attack) b.emit('attack', { attacker: u, targets, isSkill });
+    if (u.skill) u.skill.onAttackPerformed(targets, isSkill, !!opts?.noAmmo);
+    return;
+  }
   for (let i = 0; i < targets.length; i++) {
     const t = targets[i];
     b._ev(['atk', u.id, t.id, vis]);
@@ -211,8 +220,8 @@ function throwBoomerang(b, u, prof, t, info) {
 
 /** Apply one attack hit (called on impact for projectiles). `target` may be null (splash on a dead target's spot). */
 export function resolveHit(b, u, prof, target, info, x, y) {
-  const atk = u.s.atk;
-  const scale = (prof.atkScale ?? 1) * u.s.atkScaleMul;
+  const atk = prof.atkSnapshot ?? u.s.atk;
+  const scale = (prof.atkScale ?? 1) * (prof.atkScaleSnapshot ?? u.s.atkScaleMul);
   let dealtTotal = 0;
   const baseType = prof.dmgType === 'heal' || prof.dmgType === 'none' ? 'phys' : prof.dmgType;
   const skillMul = prof.skillDmgMul ?? 1;
@@ -277,7 +286,7 @@ export function resolveHit(b, u, prof, target, info, x, y) {
     }
     if (prof.chain.sluggish && target.alive) b.applyStatus(target, 'sluggish', { duration: prof.chain.sluggish, source: u });
   }
-  const hctx = { dealt: dealtTotal, x, y, isSkill: info.isSkill };
+  const hctx = { dealt: dealtTotal, x, y, atk, isSkill: info.isSkill };
   if (prof.afterHit) b._safe(() => prof.afterHit(b, u, target, hctx), 'profile.afterHit', u);
   if (prof.skillOnHit && u.skill) {
     const fn = prof.skillOnHit;

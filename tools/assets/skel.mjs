@@ -50,7 +50,8 @@ const round3 = (x) => Math.round(Number(x) * 1000) / 1000;
 
 /**
  * @typedef {{ version: string, animations: string[], durations: Record<string, number>,
- *   events: string[], hits: Record<string, number[]>, bounds: {x:number,y:number,width:number,height:number}|null,
+ *   events: string[], hits: Record<string, number[]>, eventTimes: Record<string, Record<string, number[]>>,
+ *   bounds: {x:number,y:number,width:number,height:number}|null,
  *   missingRegions: string[] }} SkelInfo
  */
 
@@ -69,12 +70,14 @@ export function parseSkel(bytes, atlasRegions) {
   const animations = data.animations.map((a) => a.name);
   const durations = {};
   const hits = {};
+  const eventTimes = {};
   for (const a of data.animations) {
     durations[a.name] = round3(a.duration);
     for (const t of a.timelines) {
       if (!t || !Array.isArray(t.events)) continue;
       for (const e of t.events) {
         const nm = e?.data?.name;
+        if (typeof nm === 'string') ((eventTimes[a.name] ||= {})[nm] ||= []).push(round3(e.time));
         if (typeof nm === 'string' && /^onattack$/i.test(nm)) {
           (hits[a.name] ||= []).push(round3(e.time));
         }
@@ -92,6 +95,7 @@ export function parseSkel(bytes, atlasRegions) {
     durations,
     events: data.events.map((e) => e.name),
     hits,
+    eventTimes,
     bounds,
     missingRegions: [...missing].sort(),
   };

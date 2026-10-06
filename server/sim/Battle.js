@@ -43,6 +43,7 @@ import { resolveProfile } from './professions.js';
 import { unitInfo, snapshotUnits } from './snapshot.js';
 import { toDataSource, normalizeRoute, normalizeStage, normalizeToken, normalizeEnemy } from './simdata.js';
 import { installContent, setupUnitKit } from './content/index.js';
+import {applyCustomAction,normalizeCustomInput,CUSTOM_ACTION_LIMIT} from './customActions.js';
 
 const DEFAULT_RECTS = { normal: GEO.NORMAL_RECT, unite: GEO.UNITE_RECT, boss: GEO.BOSS_RECT, hidden: GEO.BOSS_RECT };
 let hookSeq = 0;
@@ -121,6 +122,9 @@ export class Battle {
     this.dt = TICK;
     this.time = 0;
     this.tickCount = 0;
+    this.customActionLog=(Array.isArray(opts.customActions)?opts.customActions:[]).slice(0,CUSTOM_ACTION_LIMIT).map(normalizeCustomInput).filter(Boolean).sort((a,b)=>a.tick-b.tick);
+    this._customActionCursor=0;
+    this.customActionResults=[];
     this.finished = false;
     this.reason = null;
     this.started = false;
@@ -397,6 +401,16 @@ export class Battle {
     }
   }
 
+  /** Queue a JSON-safe input for a future frame. Never accept backdated inputs. */
+  queueCustomAction(input){
+    const normalized=normalizeCustomInput(input);
+    if(!normalized||normalized.tick<this.tickCount||this.customActionLog.length>=CUSTOM_ACTION_LIMIT||this.finished)return false;
+    // Insert after already consumed records, preserving same-frame input order.
+    let i=this.customActionLog.length;
+    while(i>this._customActionCursor&&this.customActionLog[i-1].tick>normalized.tick)i--;
+    this.customActionLog.splice(i,0,normalized);return true;
+  }
+
   step() {
     if (this.finished || this._stepping) return; // re-entrant step() from a hook is a no-op
     // forceEnd() requested while stepping (content hook, repeated engine errors) is deferred to the end of the
@@ -405,6 +419,12 @@ export class Battle {
     try {
       if (!this.started) this._phase('start', () => this.start());
       const dt = this.dt;
+      if(this._customActionCursor<this.customActionLog.length)this._phase('customInputs',()=>{
+        while(this._customActionCursor<this.customActionLog.length&&this.customActionLog[this._customActionCursor].tick<=this.tickCount){
+          const input=this.customActionLog[this._customActionCursor++];
+          this.customActionResults.push({tick:input.tick,...applyCustomAction(this,input.playerId,input.action)});
+        }
+      });
       this._phase('scheduled', () => this._runScheduled());
       this._phase('spawns', () => this._processSpawns());
       this._phase('dp', () => {
@@ -1137,7 +1157,7 @@ export class Battle {
         const o = this._occ[r * COLS + c];
         if (!o || !this._blockerFor(o, e, w)) continue;
         const d2 = (e.x - c) * (e.x - c) + (e.y - r) * (e.y - r);
-        const r2 = o.kind === 'device' ? BLOCK_RADIUS_SQ.device : fly ? BLOCK_RADIUS_SQ.fly : BLOCK_RADIUS_SQ.ground;
+        const r2 = (o.kind === 'device' ? BLOCK_RADIUS_SQ.device : fly ? BLOCK_RADIUS_SQ.fly : BLOCK_RADIUS_SQ.ground) * Math.pow(1 + (o.s.blockRadiusScale || 0), 2);
         if (d2 < r2 && d2 < bd) { u = o; bd = d2; }
       }
     }
@@ -1421,7 +1441,9 @@ export class Battle {
       this._applyValuedStatus(target, key, tpl, duration, value ?? tpl.valued, source);
     } else {
       const mods = tpl.enemyOnlyMods && target.side !== 'enemy' ? null : typeof tpl.mods === 'function' ? tpl.mods(value) : (tpl.mods || null);
-      const b = this.addBuff(target, { key, duration, refresh: opts.refresh ?? 'extend', mods, flags: tpl.flags || null, status: key, visible: true, source });
+      // A source-scoped plain status can be removed without cancelling another
+      // caster's copy; status identity still drives immunity, hooks and icons.
+      const b = this.addBuff(target, { key: opts.buffKey ?? key, duration, refresh: opts.refresh ?? 'extend', mods, flags: tpl.flags || null, status: key, visible: true, source });
       if (tpl.attract && b) this._setAttractPoint(target, b, opts.point ?? value, source);
       // 恐惧: the hit position and the source's position of every application (fear.js — the fan of reachable tiles)
       if (key === 'fear' && b && target.side === 'enemy') stampFear(this, target, b, source);
@@ -1602,7 +1624,11 @@ export class Battle {
     for (const a of this.allyUnits) {
       if (!a.alive || !a.deployed || a.hidden || a.kind === 'device') continue;
       if (!set.has(a.tileR * COLS + a.tileC)) continue;
-      if (a !== healer && (a.s.flags.noHeal || (a.profile && a.profile.noHeal))) continue;
+      // A healing-ban exception is about selection, independent of ignoring the ban at impact.
+      const exception = !!healer?.profile?.healBanException?.(a);
+      if (exception && !this.allySelectable(a, healer)) continue;
+      if (a !== healer && (a.s.flags.noHeal || (a.profile && a.profile.noHeal)) && !exception) continue;
+      if (healer?.profile?.healIgnoresBan && !exception && (a.s.flags.healFree || a.s.flags.noHeal || a.profile?.noHeal)) continue;
       const injured = a.hp < a.s.maxHp - 1e-6;
       const elem = includeElement && (a.elem.burn + a.elem.neural + a.elem.necrosis + a.elem.apoptosis + a.elem.erosion) > 0;
       if (injured || elem) out.push(a);
@@ -2363,6 +2389,16 @@ export class Battle {
       if (v) (elem || (elem = [])).push([u.id, v[0], v[1], v[2], v[3]]);
     }
     if (elem) snap.elem = elem;
+    const gauges=[];
+    for(const u of this.allyUnits){
+      if(!u.alive||!u.deployed||u.hidden)continue;
+      if(u.mem.wang)gauges.push([u.id,'stock',u.mem.wang.stock,u.mem.wang.maxStock,0,0]);
+      if(u.mem.oblvns){
+        const f=this.customFever?.get(u.ownerId);
+        gauges.push([u.id,'fever',f?.value||0,450,f?.until>this.time?r2(f.until):0,20]);
+      }
+    }
+    if(gauges.length)snap.gauges=gauges;
     return snap;
   }
 

@@ -1179,6 +1179,7 @@ export function piecePosition(ctx, piece) {
 
 /** Whether a unit piece (chess/token) may stand on a board tile. */
 export function tileAllows(ctx, piece, row, col) {
+  if(piece.kind==='token'&&ctx.getToken(piece.id)?.highGroundOnly&&ctx.deploy.melee.has(tileKey(row,col)))return false;
   const pos = piecePosition(ctx, piece);
   if (!pos) return false;
   const k = tileKey(row, col);
@@ -1195,14 +1196,18 @@ export function tileAllows(ctx, piece, row, col) {
  * @returns {Set<string> | null}
  */
 export function summonRange(ctx, piece, owner = null) {
-  if (!isObj(piece) || piece.kind !== 'token' || ctx?.getToken?.(piece.id)?.ownerRange !== true) return null;
+  if (!isObj(piece) || piece.kind !== 'token' || !ctx?.getToken?.(piece.id)?.ownerRange && !ctx?.getToken?.(piece.id)?.ownerRangeOutside) return null;
   let at = owner;
   if (!at) for (const e of ctx.boardAt.values()) if (e.piece.uid === piece.ownerUid && e.piece.kind === 'chess') { at = e; break; }
   const rec = at && ctx.getChess(at.piece.id);
   if (!rec) return null;
   let grid = null;
   try { grid = attackRangeGrid(chessLoadout(rec, ctx.priv?.loadout ?? null, ctx.getChess)?.record || rec); } catch { /* the data grid */ }
-  return new Set(rangeTiles(grid || rec.rangeGrid, at.row, at.col, pieceDir(at.piece)).map(([r, c]) => tileKey(r, c)));
+  const inside = new Set(rangeTiles(grid || rec.rangeGrid, at.row, at.col, pieceDir(at.piece)).map(([r, c]) => tileKey(r, c)));
+  if (!ctx.getToken(piece.id)?.ownerRangeOutside) return inside;
+  const outside = new Set();
+  for (let row=GEO.FIELD.r0;row<=GEO.FIELD.r1;row++) for(let col=GEO.FIELD.c0;col<=GEO.FIELD.c1;col++) if(!inside.has(tileKey(row,col))) outside.add(tileKey(row,col));
+  return outside;
 }
 
 /** tileAllows plus the owner-range rule of a range-bound summon (summonRange). */

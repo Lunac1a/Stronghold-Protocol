@@ -27,7 +27,10 @@ for (let dr = -4; dr <= 4; dr++) for (let dc = -4; dc <= 7; dc++) if ((dr || dc)
 const HELP = [[1, 1], [0, -1], [-1, 0]];
 const helpers = Object.fromEntries(HELP.map((_, i) => [`t_help${i}`, chessRec({ id: `t_help${i}`, profession: 'SNIPER', rangeGrid: [[0, 0]], skill: null, stats: { maxHp: 4000 + 500 * i, atk: 0, blockCnt: 0 } })]));
 // 凯瑟琳 hands out her devices front-most operator first by board column — a board position (DESIGN), not a facing
-const BOARD_POSITION_RULES = new Set(['chess_char_4_11_a', 'chess_char_4_11_b']);
+// Wang's followers use the map's up/right/down/left order (PRTS 铸子), independent
+// of facing. That changes activation lines and therefore damage when a board rotates.
+// Its absolute placement rule is checked separately in custom_operators.test.js.
+const BOARD_POSITION_RULES = new Set(['chess_char_4_11_a', 'chess_char_4_11_b','chess_custom_6_wang_a','chess_custom_6_wang_b']);
 const walkRoute = (pos) => ({ motion: 'WALK', start: pos, checkpoints: [{ type: 'WAIT', time: 1e4 }], end: pos });
 
 function scenario(chessId, dir, secs) {
@@ -76,7 +79,8 @@ test('rotation invariance: every chess (normal + elite) facing UP / LEFT / DOWN 
         if (!same(dmg, dmg2) || Math.abs(lr - lr2) > 0.15 || Math.abs(lc - lc2) > 0.15) diffs.push(`enemy ${OFFS[i]}: ${dmg}@${lr},${lc} vs ${dmg2}@${lr2},${lc2}`);
       });
       base.helpers.forEach((hp, i) => { if (!same(hp, o.helpers[i])) diffs.push(`helper ${HELP[i]}: hp ${hp} vs ${o.helpers[i]}`); });
-      if (base.tokens.join() !== o.tokens.join()) diffs.push(`summons [${base.tokens}] vs [${o.tokens}]`);
+      // Wisdel breaks equal-distance placement ties by absolute map position. Damage still rotates identically.
+      if (!rec.charId?.includes('wisdel') && base.tokens.join() !== o.tokens.join()) diffs.push(`summons [${base.tokens}] vs [${o.tokens}]`);
       if (base.extra !== o.extra) diffs.push(`extra enemies ${base.extra} vs ${o.extra}`);
       if (diffs.length) bad.push(`${rec.chessId} ${rec.name} ${d}: ${diffs.slice(0, 3).join(' | ')}`);
     }

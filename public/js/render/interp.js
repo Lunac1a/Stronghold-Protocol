@@ -99,7 +99,12 @@ export function normalizeSnapshot(snap) {
       (down || (down = [])).push(e);
     }
   }
-  return { t, units, down, raw: snap };
+  const gauges=new Map();
+  if(Array.isArray(snap.gauges))for(const g of snap.gauges){
+    if(!Array.isArray(g)||!units.has(g[0])||!['stock','fever'].includes(g[1])||!Number.isFinite(g[3])||g[3]<=0)continue;
+    gauges.set(g[0],{kind:g[1],value:clamp(finite(g[2]),0,g[3]),max:g[3],until:Math.max(0,finite(g[4])),duration:Math.max(0,finite(g[5]))});
+  }
+  return { t, units, down, gauges, raw: snap };
 }
 
 export class SnapshotBuffer {
@@ -317,6 +322,8 @@ export class SnapshotBuffer {
       o.flags = a[7];
       o.anim = a[8];
       if (a.length > 9) { o.el = a[9]; o.elFill = a[10]; o.elUntil = a[11]; o.elDur = a[12]; } else if (o.el !== null) { o.el = null; o.elFill = 0; o.elUntil = 0; o.elDur = 0; }
+      const gauge=A.gauges.get(id);
+      if(gauge)o.gauge=gauge;else delete o.gauge;
       o.seen = stamp;
     }
     for (const id of out.keys()) if (!A.units.has(id)) out.delete(id);

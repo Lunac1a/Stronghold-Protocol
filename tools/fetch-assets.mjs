@@ -39,6 +39,7 @@ import { normalizeProxyPrefix } from './assets/sources.mjs';
 import { loadIndexes } from './assets/cache.mjs';
 import { indexAudio, VOICE_DIRS } from './assets/audio.mjs';
 import { buildPlan } from './assets/plan.mjs';
+import { addCustomAssetResearch } from './custom-operators.mjs';
 import { processModels, findLocalEnemyModels, localEnemySpineMeta, loadLocalEnemySpines, LOCAL_ENEMY_SPINES_FILE } from './assets/spine.mjs';
 import { collectLeaves, downloadLeaves, resolveTemplate, totalBytes, contentHash, droppedEntries, MANIFEST_VERSION } from './assets/manifest.mjs';
 import { fontJobs, buildFonts } from './assets/fonts.mjs';
@@ -238,6 +239,7 @@ async function main() {
     readJson('docs/research/05-enemies.json'),
     readJson('docs/research/05-maps.json'),
   ]);
+  addCustomAssetResearch(assets07);
   const proxyPrefix = resolveProxyPrefix(opts.source, opts.offline);
   const source = await selectDownloadSource({ mode: opts.source, offline: opts.offline, proxyPrefix, log });
   const mirrorPolicy = new MirrorPolicy({ source, proxyPrefix, log });

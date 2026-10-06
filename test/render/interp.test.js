@@ -17,6 +17,14 @@ function feed(buf, frames, t0 = 0, realStep = 0.05, gameStep = 0.1) {
 }
 
 describe('normalizeSnapshot', () => {
+  test('custom gauges survive a fresh snapshot and clear when absent',()=>{
+    const b=new SnapshotBuffer(),wire={t:1,units:[U(1,2,3)],gauges:[[1,'fever',900,450,21,20],[99,'stock',2,7,0,0],[1,'unknown',1,1,0,0]]};
+    assert.ok(b.push(wire,0));
+    const out=b.sample(1);assert.deepEqual(out.get(1).gauge,{kind:'fever',value:450,max:450,until:21,duration:20});
+    b.push({t:2,units:[U(1,2,3)]},1);b.sample(2,out);assert.equal(out.get(1).gauge,undefined);
+    const malformed=normalizeSnapshot({t:3,units:[U(1,2,3)],gauges:[[1,'stock',1,0],[1,'fever',0,NaN]]});
+    assert.equal(malformed.gauges.size,0);
+  });
   test('rejects junk, keeps valid tuples, fills defaults', () => {
     assert.equal(normalizeSnapshot(null), null);
     assert.equal(normalizeSnapshot({ t: 'x' }), null);

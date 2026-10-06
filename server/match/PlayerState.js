@@ -1023,6 +1023,7 @@ export class PlayerState {
    * summon swapped with its own owner).
    */
   _legal(piece, r, c, owner = null) {
+    if (piece.kind==='token'&&this.gd.token(piece.id)?.highGroundOnly&&this.deployMap().get(tileKey(r,c))!=='ranged')return false;
     if (!canPlace(this.deployMap(), this._placementOf(piece), r, c)) return false;
     const range = this.summonRange(piece, owner);
     return !range || range.has(tileKey(r, c));
@@ -1039,14 +1040,18 @@ export class PlayerState {
    * @returns {Set<string> | null}
    */
   summonRange(piece, owner = null) {
-    if (!piece || piece.kind !== 'token' || this.gd.token(piece.id)?.ownerRange !== true) return null;
+    if (!piece || piece.kind !== 'token' || !this.gd.token(piece.id)?.ownerRange && !this.gd.token(piece.id)?.ownerRangeOutside) return null;
     let at = owner;
     if (!at) for (const [key, p] of this.board) if (p.uid === piece.ownerUid && p.kind === 'chess') { at = { key, piece: p, dir: pieceDir(p) }; break; }
     const rec = at && this.gd.chess(at.piece.id);
     if (!rec) return null;
     const grid = attackRangeGrid(loadoutRecord(rec, resolveRecordLoadout(rec, this.loadoutFor(rec)))) || rec.rangeGrid;
     const [r, c] = parseKey(at.key);
-    return ownerRangeKeys(grid, r, c, at.dir);
+    const inside = ownerRangeKeys(grid, r, c, at.dir);
+    if (!this.gd.token(piece.id)?.ownerRangeOutside) return inside;
+    const outside = new Set();
+    for (let row=FIELD.r0;row<=FIELD.r1;row++) for(let col=FIELD.c0;col<=FIELD.c1;col++) if(!inside.has(tileKey(row,col))) outside.add(tileKey(row,col));
+    return outside;
   }
 
   /**

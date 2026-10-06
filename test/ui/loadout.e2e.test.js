@@ -95,7 +95,7 @@ describe('干员调配 overlay (real server, headless Chrome)', { skip: !ENABLED
     const { ctx, page, problems } = await open();
     await clickSel(page, '.lobby-screen [data-testid="loadout-open"]');
     await page.waitForSelector('.lo .lo-card', { visible: true, timeout: 15000 });
-    assert.equal(await page.$$eval('.lo-card', (els) => els.length), 112, 'every visible chess');
+    assert.equal(await page.$$eval('.lo-card', (els) => els.length), 117, 'every visible chess');
     await assertBgLayer(page);
     await page.screenshot({ path: path.join(OUT, 'loadout-desktop.png') });
     // search → one card

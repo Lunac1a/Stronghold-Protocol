@@ -198,6 +198,7 @@ export class SkillRuntime {
    * had left (spent at its activation: 0 for a one-charge skill — PRTS 技能 "触发技能后…消耗相应的技力").
    */
   reset(carry = null) {
+    const ammoLeft = this.ammoLeft;
     this.active = false;
     this.pending = false;
     this.timeLeft = 0;
@@ -507,6 +508,7 @@ export class SkillRuntime {
    * fires — neither when onEnd re-activated the skill (the new cast owns both).
    */
   end(reason = 'end') {
+    const ammoLeft = this.ammoLeft;
     if (!this.active || this.kind === 'passive' && reason !== 'death') return;
     const u = this.unit;
     const b = this.battle;
@@ -516,7 +518,7 @@ export class SkillRuntime {
     this.ammoLeft = 0;
     this.ammoMax = 0;
     const n = this.activations;
-    this._call('onEnd', { reason });
+    this._call('onEnd', { reason, ammoLeft });
     // onEnd started the next cast (耀骑士临光 S2 retreats on its duration end and 不屈 redeploys her inside that call; the
     // deploy-timed skill starts again, PR #109): that cast owns the mods and its events — a trailing skillEnd would make
     // listeners (骑士戒律) clear the new cast and the client would see the skill off while it runs

@@ -33,11 +33,12 @@ function place(m, ps, chessId, row, col) {
 // ---- shared checks -------------------------------------------------------------------------------------------------
 
 test('data carries the §16 choices every visible chess needs (skills at both statuses, elite modules + none)', () => {
-  assert.equal(visible.length, 112);
+  assert.equal(visible.length, 117);
   for (const c of visible) {
     const g = chess(c.goldenId);
     const o = loadoutOptions(c, g);
-    assert.ok(o.skills.length >= 2, `${c.name}: selectable skills`);
+    if(Array.isArray(c.availableSkillIndices))assert.deepEqual(o.skills,c.availableSkillIndices,`${c.name}: focused release choices`);
+    else assert.ok(o.skills.length >= 2, `${c.name}: selectable skills`);
     assert.ok(o.skills.includes(o.defaultSkill), `${c.name}: default skill is selectable`);
     assert.equal(o.defaultSkill, c.skill.index, `${c.name}: default = defaultSkillIndex`);
     assert.ok(o.modules.includes(MODULE_NONE) && o.modules.includes(o.defaultModule), `${c.name}: modules`);

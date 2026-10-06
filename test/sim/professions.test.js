@@ -47,7 +47,7 @@ test('every visible chess (normal & elite) fights in a real battle without error
     if (u.stats.attacks === 0 && u.stats.heal === 0 && !(u.skill && u.skill.activations > 0)) silent.push(id + ':' + u.def.subProf);
   }
   // units that legitimately never act on their own in this setup (no injured ally / no attack without skill)
-  silent = silent.filter((s) => !/:(physician|ringhealer|chainhealer|healer|wandermedic|bard|phalanx|librator)$/.test(s));
+  silent = silent.filter((s) => !/:(physician|ringhealer|chainhealer|healer|watchman|wandermedic|bard|phalanx|librator)$/.test(s));
   assert.deepEqual(silent, []);
 });
 

@@ -77,6 +77,7 @@
 // releaseSkillSummon, SKILL_SUMMON_START_DEPLOY, CAT_SHIELD_KEY, TOKEN_IDS.
 
 import { COLS, ROWS, MOVE_SCALE } from '../constants.js';
+import { customTokenKits } from './kits/custom.js';
 import { absoluteRangeKeys, sortEnemyTargets, canTargetEnemy } from '../targeting.js';
 import { bodyInKeys, bodyOnTile } from '../body.js';
 import { hasHp } from '../damage.js';
@@ -1376,7 +1377,7 @@ const RAW_KITS = {
   [TOKEN_IDS.touch]: touchKit,
 };
 /** tokenId → kit fn; kits built here carry `fromTokens: true` (deploy limits only police those). */
-export const kits = Object.freeze(Object.fromEntries(Object.entries(RAW_KITS).map(([id, f]) => [id, (bb, raw, def) => {
+export const kits = Object.freeze(Object.fromEntries(Object.entries({ ...RAW_KITS, ...customTokenKits }).map(([id, f]) => [id, (bb, raw, def) => {
   const k = f(bb ?? {}, raw ?? {}, def ?? null);
   if (k && typeof k === 'object') k.fromTokens = true;
   return k;

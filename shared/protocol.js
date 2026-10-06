@@ -79,7 +79,7 @@ export const isLoadoutEntries = (v) => isMap(v, LOADOUT_LIMITS.entries, isId, is
 function skillIndexesOf(c) {
   if (!c || typeof c !== 'object') return [];
   if (Array.isArray(c.skills) && c.skills.length) {
-    return [...new Set(c.skills.map((s) => s && s.index).filter((i) => isInt(i, 0, LOADOUT_LIMITS.skillIndex)))].sort((a, b) => a - b);
+    return [...new Set(c.skills.map((s) => s && s.index).filter((i) => isInt(i, 0, LOADOUT_LIMITS.skillIndex) && (!Array.isArray(c.availableSkillIndices) || c.availableSkillIndices.includes(i))))].sort((a, b) => a - b);
   }
   return isInt(c.skill?.index, 0, LOADOUT_LIMITS.skillIndex) ? [c.skill.index] : [];
 }
@@ -303,6 +303,8 @@ export const C2S = {
     $optional: ['leaks', 'bossDmg', 'by', 'done', 'left'],
   },
   'b.result': { battleId: isId, result: isBattleResult },
+  'b.action': {battleId:isId,seq:(v)=>isInt(v,0,2047),tick:(v)=>isInt(v,0,54000),
+    action:(a)=>isPlain(a)&&['wang.place','kalts.move','kalts.anchor'].includes(a.kind)&&isUid(a.uid)&&(a.kind!=='kalts.move'||isUid(a.targetUid))&&isInt(a.row,0,GEO.ROWS-1)&&isInt(a.col,0,GEO.COLS-1)},
 };
 
 // Server → client message types (documentation + client dispatch table keys).

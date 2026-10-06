@@ -1359,6 +1359,8 @@ export async function createFieldView(host, options = {}) {
     if (destroyed) return;
     const ev = evPayload(e);
     if (mode === 'battle') {
+      const tile = groundTile(ev.x, ev.y);
+      if (tile) emit('battleTileClick', { ...tile, button: e.button, clientX: e.clientX, clientY: e.clientY });
       const v = battleUnitAt(ev.x, ev.y);
       if (v) {
         const info = infos.get(v.id) || v.info;

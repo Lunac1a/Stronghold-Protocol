@@ -593,7 +593,8 @@ export function createBattleRunner(deps) {
     if (!msg || typeof msg !== 'object' || !msg.spec || typeof msg.battleId !== 'string') return;
     const speed = Number(msg.speed) > 0 ? Number(msg.speed) : 2;
     const existing = entries.get(msg.battleId);
-    if (existing) {
+    const changedInputs=existing&&JSON.stringify(existing.spec.customActions||[])!==JSON.stringify(msg.spec.customActions||[]);
+    if (existing && !changedInputs) {
       const was = existing.authoritative;
       existing.authoritative = !!msg.authoritative && !existing.resultSent;
       existing.watch = !!msg.watch;
@@ -612,6 +613,7 @@ export function createBattleRunner(deps) {
       else { publishState(); schedule(); }
       return;
     }
+    if(changedInputs)entries.delete(msg.battleId);
     const seq = ++startSeq;
     loading = { battleId: msg.battleId, fieldId: msg.fieldId, kind: msg.kind };
     publishState();
@@ -638,6 +640,7 @@ export function createBattleRunner(deps) {
       members: (msg.spec.players || []).map((p) => p && p.playerId).filter(Boolean),
       t0: clock() - ((Number(msg.elapsed) || 0) / speed) * 1000, lastProgressAt: -Infinity, done: false, resultSent: false,
       result: null, delivery: null,
+      inputSeq: Math.max(existing?.inputSeq||0,...(msg.spec.customActions||[]).map(a=>Number.isInteger(a.requestSeq)?a.requestSeq+1:0)),
       meter: sim.spec.attachLpMeter(battle),
       // counted leaks so far (normal fields; noteLeaks) and the Battle state they were counted at; 联防 fields: each
       // leaker's enemies still standing (noteUniteLeft)
@@ -755,6 +758,17 @@ export function createBattleRunner(deps) {
       return () => listeners.get(type)?.delete(fn);
     },
     state,
+    async customAction(ownerId,action){
+      const e=cur;
+      if(!e||e.watch||e.done||!['normal','unite'].includes(e.kind)||!e.members.includes(ownerId)||e.kind==='normal'&&!e.authoritative||loading||!net?.request)throw new Error('当前不能操作');
+      const u=e.battle.allyUnits.find(u=>u.ownerId===ownerId&&u.uid===action?.uid);
+      if(!u?.alive||!u.deployed||!(u.mem.wang&&action.kind==='wang.place'||u.skill?.id==='skchr_kalts2_3'&&['kalts.move','kalts.anchor'].includes(action.kind)))throw new Error('干员当前不能执行该操作');
+      const msg={battleId:e.battleId,seq:e.inputSeq++,tick:e.battle.tickCount,action};
+      try{return await net.request('b.action',msg);}catch(error){
+        if(error?.code==='TIMEOUT')return net.request('b.action',msg);
+        throw error;
+      }
+    },
     stats() {
       return { ...stats, avgTickMs: stats.ticks ? stats.stepMs / stats.ticks : 0, entries: entries.size, loadingSim: !!simP };
     },

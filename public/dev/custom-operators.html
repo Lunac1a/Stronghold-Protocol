@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>新增干员素材验收</title><style>body{margin:0;background:#101925;color:#eff6fb;font:16px system-ui}main{padding:32px}h1{font-size:28px}p{color:#abbccf}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}.card{background:#1b2a3c;border:1px solid #31465f;border-radius:14px;padding:16px;text-align:center}.portrait{height:170px;width:100%;object-fit:contain}.model{height:230px}button{background:#314a69;border:0;color:white;border-radius:6px;padding:8px;margin:3px;cursor:pointer}.status{font-size:12px;color:#74deb4;min-height:40px}small{color:#a9bbd1}</style><main><h1>新增干员 · 素材验收</h1><p>使用项目原有 Spine 运行时加载真实骨骼；切换朝向与技能检查动作。这里仅验收素材，战斗效果由共享引擎测试。</p><div class="grid" id="grid"></div></main><script src="/vendor/pixi.min.js"></script><script src="/vendor/pixi-spine.js"></script><script type="module">
+const m=await(await fetch('/data/assets.json')).json();
+const rows=[['char_2027_wang','望','6阶 · 炎'],['char_1050_chen3','赤刃明霄陈','5阶 · 炎'],['char_1052_kalts2','凯尔希·思衡托','5阶 · 协防'],['char_4182_oblvns','丰川祥子','6阶 · 协防'],['char_1035_wisdel','维什戴尔','5阶 · 协防']];
+rows.push(['token_10064_wang_stone1','棋子','召唤物'],['token_10035_wisdel_wward','魂灵之影','召唤物'],['token_10068_kalts2_mtship','战术锚点','召唤物']);
+window.previewErrors=[];window.previewModels=[];
+for(const [id,name,tier]of rows){
+ const token=m.tokens[id],c=token?{...token,spine:{front:token.spine}}:m.chars[id],el=document.createElement('div');el.className='card';el.innerHTML=`<h2>${name}</h2><small>${tier}</small><img class="portrait" src="${c.portraitE2||c.portrait||c.avatar}"><div class="model"></div><div class="buttons"></div><p class="status">加载中…</p>`;grid.append(el);
+ const app=new PIXI.Application({width:220,height:230,backgroundAlpha:0,antialias:true,resolution:1});el.querySelector('.model').append(app.view);
+ let actor,side='front';
+ const load=async()=>{try{if(actor){app.stage.removeChild(actor);actor.destroy({children:true,texture:false,baseTexture:false});}const entry=c.spine[side];const res=await PIXI.Assets.load(entry.skel);actor=new PIXI.spine.Spine(res.spineData);actor.position.set(110,218);actor.scale.set(0.32);app.stage.addChild(actor);actor.state.setAnimation(0,entry.anims.idle,true);el.querySelector('.status').textContent=`${side==='front'?'前':'后'}朝向 · 骨骼与纹理已加载`;window.previewModels.push(id+':'+side);}catch(e){window.previewErrors.push(id+':'+e.message);el.querySelector('.status').textContent=e.message;}};
+ const play=i=>{const e=c.spine[side],role=e.anims.skills?.[i];if(role?.loop)actor.state.setAnimation(0,role.loop,true);else throw Error(name+'缺少技能动作'+i);};
+ const controls=token?[['待机',()=>actor.state.setAnimation(0,c.spine.front.anims.idle,true)],...['deploy','attack','die'].map((key,i)=>[['部署','攻击','倒下'][i],()=>{const role=c.spine.front.anims[key],anim=typeof role==='string'?role:role?.loop;if(anim)actor.state.setAnimation(0,anim,key==='attack');}])]:[['朝向',async()=>{side=side==='front'?'back':'front';await load();}],['待机',()=>actor.state.setAnimation(0,c.spine[side].anims.idle,true)],...['一','二','三'].map((s,i)=>['技能'+s,()=>play(i)])];
+ for(const [label,fn]of controls){const b=document.createElement('button');b.textContent=label;b.onclick=fn;el.querySelector('.buttons').append(b);}
+ await load();
+}
+window.previewReady=true;
+</script></html>

@@ -165,7 +165,8 @@ test('sanitizeEntries: drops unknown chess / illegal parts one by one, and the r
     all[c.chessId] = { skill: o.skills.find((i) => i !== o.defaultSkill), module: o.modules[o.modules.length - 1] };
   }
   const s = sanitizeEntries(all, get);
-  assert.equal(Object.keys(s).length, 112);
+  const expected=rosterOf(Object.values(CHESS)).filter(c=>{const o=chessOptions(c,get(c.goldenId));return o.skills.some(i=>i!==o.defaultSkill)||o.modules.at(-1)!==o.defaultModule;}).length;
+  assert.equal(Object.keys(s).length, expected);
   assert.ok(checkLoadout(s, get).ok);
 });
 
@@ -179,9 +180,9 @@ test('selectedSkill / selectedModule for the in-match UI (shop cards, detail pan
   assert.equal(selectedSkill(null, SB, get).index, SB.skill.index);
 });
 
-test('roster and filters: 112 visible chess in shop order; tier / class / bond / search / changed-only', () => {
+test('roster and filters: 117 visible chess in shop order; tier / class / bond / search / changed-only', () => {
   const roster = rosterOf(Object.values(CHESS));
-  assert.equal(roster.length, 112);
+  assert.equal(roster.length, 117);
   assert.ok(roster.every((c) => !c.isGolden && c.visible));
   for (let i = 1; i < roster.length; i++) assert.ok(roster[i - 1].tier <= roster[i].tier);
   const t3 = filterRoster(roster, { tier: 3 }, {}, get, getBond);

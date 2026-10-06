@@ -33,6 +33,7 @@
 import { ALWAYS_ENABLED_BONDS } from '../shared/bondPolicy.js';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { CUSTOM_OPERATORS, addCustomCards, adaptCustomSkillDescriptions } from './custom-operators.mjs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Grid, DEPLOY_REFUSED_TILES } from '../server/sim/grid.js';
@@ -262,6 +263,19 @@ function textPair(raw, bb, bbStr, label) {
 /** Natural sort for ids like chess_char_1_10_a (numbers compared numerically). */
 function naturalCmp(a, b) { return String(a).localeCompare(String(b), 'en', { numeric: true }); }
 
+const customPotentialRank = label => String(label).includes('chess_custom_') ? 5 : 0;
+function applyCustomTraining(attrs, char) {
+  if(!attrs)return attrs;
+  const out={...attrs},trust=char.favorKeyFrames?.at(-1)?.data||{};
+  for(const [key,value] of Object.entries(trust))if(typeof value==='number'&&typeof out[key]==='number')out[key]+=value;
+  const fields={MAX_HP:'maxHp',ATK:'atk',DEF:'def',MAGIC_RESISTANCE:'magicResistance',COST:'cost',ATTACK_SPEED:'attackSpeed',RESPAWN_TIME:'respawnTime'};
+  for(const rank of char.potentialRanks||[])for(const mod of rank.buff?.attributes?.attributeModifiers||[]){
+    const key=fields[mod.attributeType];
+    if(!key||mod.formulaItem!=='ADDITION')throw new Error(`unsupported custom potential modifier ${mod.attributeType}/${mod.formulaItem}`);
+    out[key]+=mod.value;
+  }
+  return out;
+}
 const PHASE_INDEX = { PHASE_0: 0, PHASE_1: 1, PHASE_2: 2 };
 const phaseIdx = (p) => (typeof p === 'number' ? p : PHASE_INDEX[p] ?? 0);
 
@@ -275,9 +289,9 @@ function unlocked(cond, phase, level, potRank = 0, reqPot = 0) {
   return (cond.level || 1) <= level;
 }
 /** Pick the best candidate (the last unlocked one) from an official candidate list. */
-function bestCandidate(cands, phase, level) {
+function bestCandidate(cands, phase, level, potRank = 0) {
   let best = null;
-  for (const c of cands || []) if (c && unlocked(c.unlockCondition, phase, level, 0, c.requiredPotentialRank)) best = c;
+  for (const c of cands || []) if (c && unlocked(c.unlockCondition, phase, level, potRank, c.requiredPotentialRank)) best = c;
   return best;
 }
 
@@ -569,7 +583,7 @@ function splitModuleParts(modulePhase) {
 function applyModuleTraitParts(parts, phase, level, traitBB, template, rangeId, label) {
   let moduleText = null;
   for (const part of parts || []) {
-    const mc = bestCandidate(part.overrideTraitDataBundle?.candidates, phase, level);
+    const mc = bestCandidate(part.overrideTraitDataBundle?.candidates, phase, level, customPotentialRank(label));
     if (!mc) continue;
     const mb = flattenBB(mc.blackboard, `${label} module trait`);
     Object.assign(traitBB.bb, mb.bb);
@@ -587,7 +601,7 @@ function applyModuleTraitParts(parts, phase, level, traitBB, template, rangeId, 
  * @returns {{ trait: object, classify: object }}
  */
 function traitRecord(ctx, char, phase, level, opParts, chessId) {
-  const tc = bestCandidate(char.trait?.candidates, phase, level);
+  const tc = bestCandidate(char.trait?.candidates, phase, level, customPotentialRank(chessId));
   const traitBB = flattenBB(tc?.blackboard, `${chessId} trait`);
   const traitMod = applyModuleTraitParts(opParts, phase, level, traitBB,
     tc?.overrideDescripton || char.description || '', tc?.rangeId || null, chessId);
@@ -634,7 +648,7 @@ function buildTalents(ctx, char, phase, level, moduleParts, label, modPhase = ph
 function baseTalentList(ctx, char, phase, level, label) {
   const talents = [];
   (char.talents || []).forEach((t, index) => {
-    const c = bestCandidate(t.candidates, phase, level);
+    const c = bestCandidate(t.candidates, phase, level, customPotentialRank(label));
     if (!c) return;
     const { bb, bbStr } = flattenBB(c.blackboard, `${label} talent ${index}`);
     const { desc, descRaw } = textPair(c.description, bb, bbStr);
@@ -657,7 +671,7 @@ function moduleTalentChanges(ctx, moduleParts, modPhase, modLevel, label) {
   for (const part of moduleParts || []) {
     const cands = part.addOrOverrideTalentDataBundle?.candidates;
     if (!cands) continue;
-    const c = bestCandidate(cands, modPhase, modLevel);
+    const c = bestCandidate(cands, modPhase, modLevel, customPotentialRank(label));
     if (!c) continue;
     const { bb, bbStr } = flattenBB(c.blackboard, `${label} module talent`);
     const text = c.upgradeDescription || c.description;
@@ -809,6 +823,8 @@ function buildChess(ctx) {
     rec.subProfessionName = uniequip.subProfDict?.[char.subProfessionId]?.subProfessionName || null;
     rec.position = char.position;
     rec.nationId = char.nationId || null;
+    rec.teamId = char.teamId || null;
+    rec.groupId = char.groupId || null;
     // 高台 is not a data flag: a MELEE chess whose trait (no module: `traitBase` / `trait`) reads 「可以放置于远程位」
     // — the 钩索师 / 推击手 branch trait — may stand there, read at place time (shared/highGround.js; the owner's
     // decision of 2026-10-05, following PRTS).
@@ -837,7 +853,8 @@ function buildChess(ctx) {
     const moduleParts = splitModuleParts(modulePhase);
 
     // Stats (+ module attribute bonus on golden).
-    const attrs = interpolateAttrs(char, phase, level);
+    let attrs = interpolateAttrs(char, phase, level);
+    if(customPotentialRank(chessId)){attrs=applyCustomTraining(attrs,char);rec.status.potential=6;rec.status.trust=200;}
     if (!attrs) warn(`chess ${chessId}: cannot interpolate attributes`);
     const bonus = {};
     for (const b of modulePhase?.attributeBlackboard || []) bonus[b.key] = (bonus[b.key] || 0) + b.value;
@@ -1150,8 +1167,11 @@ function buildTokens(ctx, chess, tokenOwners, enemies) {
     out[tokenId] = {
       tokenId, kind: 'summon', name: char.name, appellation: char.appellation || null,
       desc: stripRich(first.trait.desc), descRaw: first.trait.descRaw,
-      profession: char.profession, subProfessionId: char.subProfessionId, position: char.position,
-      displayType: displayType(tokenId), placeable: displayType(tokenId) !== 'HIDDEN' && produced, ownerRange,
+      profession: char.profession, subProfessionId: char.subProfessionId,
+      // PRTS 棋子: actual deployment is ALL; the client summon info incorrectly
+      // displays MELEE. Preserve the documented runtime exception on rebuild.
+      position: tokenId==='token_10064_wang_stone1'?'ALL':char.position,
+      displayType: displayType(tokenId), placeable: displayType(tokenId) !== 'HIDDEN' && produced, ownerRange, highGroundOnly: tokenId==='token_10068_kalts2_mtship', ownerRangeOutside: tokenId==='token_10068_kalts2_mtship'||/(?:只能|仅可以)部署在\S*攻击范围外/.test(stripRich(first.trait.desc)||''),
       owners: owners.map((o) => o.chessId),
       // Defaults = first owner's variant; per-owner data in variants[chessId].
       stats: first.stats, rangeGrid: first.rangeGrid, dmgType: first.dmgType, attackKind: first.attackKind,
@@ -3130,7 +3150,7 @@ function validateAll(f) {
   const visible = Object.values(chess).filter((c) => !c.isGolden && c.visible);
   if (Object.keys(bonds).length !== 23) err(`expected 23 bonds, got ${Object.keys(bonds).length}`);
   if (Object.keys(bands).length !== 40) err(`expected 40 bands, got ${Object.keys(bands).length}`);
-  if (visible.length !== 112) err(`expected 112 visible non-DIY chess, got ${visible.length}`);
+  if (visible.length !== 112 + CUSTOM_OPERATORS.length) err(`expected ${112 + CUSTOM_OPERATORS.length} visible non-DIY chess, got ${visible.length}`);
   for (const c of Object.values(chess)) {
     if (!chess[c.baseId]) err(`chess ${c.chessId}: baseId missing`);
     if (c.goldenId && !chess[c.goldenId]) err(`chess ${c.chessId}: goldenId missing`);
@@ -3234,8 +3254,10 @@ function validateAll(f) {
 async function main() {
   const t0 = Date.now();
   const ctx = await loadContext();
+  addCustomCards(ctx);
   log('building…');
   const { chess, tokenOwners } = buildChess(ctx);
+  adaptCustomSkillDescriptions(chess);
   const effects = buildEffects(ctx);
   const bonds = buildBonds(ctx, chess, effects);
   const garrisons = buildGarrisons(ctx, chess);

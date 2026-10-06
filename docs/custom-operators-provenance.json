@@ -1,0 +1,39 @@
+{
+  "checkedDate": "2026-10-06",
+  "baseRepository": "https://github.com/sganggs/Stronghold-Protocol",
+  "baseCommit": "54cdad26021452791d7921277e099f72ae646299",
+  "characterDataSource": "https://github.com/Kengxxiao/ArknightsGameData/tree/master/zh_CN/gamedata",
+  "snapshots": {
+    "character_table": {
+      "sha256": "68e3a3b5ee0d407ce234afaa5867c6fda6379a6843c7d5317a7bbda4779f8697",
+      "bytes": 14975251
+    },
+    "skill_table": {
+      "sha256": "86f4aa64c785f39727edd06d6dd8a4f27f371c8e4ace5345ba0dc61dee1386ca",
+      "bytes": 11447929
+    },
+    "battle_equip_table": {
+      "sha256": "006687f201a823abf31c6a1c57b2269099bd3ea375c2ec3ae5595cc98a1ec460",
+      "bytes": 5710707
+    },
+    "uniequip_table": {
+      "sha256": "b508483cc87c03d8313f4dd8dfc1b9195bc50385a8dfec51d17e657cb26ffad9",
+      "bytes": 3365012
+    },
+    "activity_table": {
+      "sha256": "46fddc2ce1bd4dc9ccb308f03fdb7f66b3c86460f8b3995d1b7c7f2d7d2a5131",
+      "bytes": 14129184
+    },
+    "range_table": {
+      "sha256": "4d974598394630a1ad465b954321254397f514c7fb26cba944d320ac18b874d0",
+      "bytes": 53368
+    }
+  },
+  "mechanicsSources": [
+    "https://prts.wiki/w/望",
+    "https://prts.wiki/w/赤刃明霄陈",
+    "https://prts.wiki/w/凯尔希·思衡托",
+    "https://prts.wiki/w/丰川祥子",
+    "https://prts.wiki/w/维什戴尔"
+  ]
+}

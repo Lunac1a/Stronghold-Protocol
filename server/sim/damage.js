@@ -513,8 +513,10 @@ export function reduceElement(target, amount, el = null) {
 export function heal(battle, source, target, amount, opts = {}) {
   if (!target || !target.alive || target.removed || !target.deployed || target.bossPool) return 0;
   const self = source === target || !!opts.self;
-  if (!self && (target.s.flags.noHeal || (target.profile && target.profile.noHeal))) return 0;
-  if (target.s.flags.healFree && !opts.regen && !opts.ignoreHealFree) return 0;
+  // Esperanta ignores a healing ban at impact; this never bypasses friendly isolation.
+  const ignoreBan = !!source?.profile?.healIgnoresBan && (self || !target.s.flags.isolated);
+  if (!self && !ignoreBan && (target.s.flags.noHeal || (target.profile && target.profile.noHeal))) return 0;
+  if (target.s.flags.healFree && !ignoreBan && !opts.regen && !opts.ignoreHealFree) return 0;
   let amt = amount * (source && source.s ? source.s.healingDealtMul : 1) * target.s.healingTakenMul;
   if (!(amt > 0) || !Number.isFinite(amt)) return 0;
   if (battle._hooks.heal) {

@@ -71,7 +71,7 @@ export function flagsOf(u) {
   if (f.invulnerable) bits |= UF.INVULN;
   if (f.cold) bits |= UF.COLD;
   if (f.sleep) bits |= UF.SLEEP;
-  if (u.motion === 'FLY') bits |= UF.FLYING;
+  if (u.motion === 'FLY' || f.liftoff) bits |= UF.FLYING;
   return bits;
 }
 
